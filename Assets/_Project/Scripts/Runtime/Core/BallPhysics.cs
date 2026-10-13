@@ -28,8 +28,14 @@ namespace FirstPersonTennis
     // 결정적 공 물리. Unity 물리 엔진을 쓰지 않아서, 같은 상태에서 출발하면 예측과 실제 비행이 정확히 같다.
     public static class BallPhysics
     {
-        public const float Radius = 0.0335f;
+        public const float RealRadius = 0.0335f;
         public const float Step = 1f / 240f;
+
+        // 바닥·네트에 닿는 판정과 화면 표시에 쓰는 반지름. TennisConfig의 공 지름에서 들어온다.
+        // 공기저항·스핀·바운드 마찰은 실제 공(RealRadius) 기준이라 공을 키워도 비행 특성은 그대로다.
+        public static float Radius { get; private set; } = RealRadius;
+
+        public static void SetRadius(float radius) => Radius = Mathf.Max(0.005f, radius);
 
         const float Mass = 0.057f;
         const float AirDensity = 1.21f;
@@ -38,7 +44,7 @@ namespace FirstPersonTennis
         const float RollThreshold = 0.4f;    // 이보다 느리게 닿으면 튀지 않고 구른다
         const float RollingDecay = 0.5f;
 
-        static readonly float AeroK = 0.5f * AirDensity * Mathf.PI * Radius * Radius / Mass;
+        static readonly float AeroK = 0.5f * AirDensity * Mathf.PI * RealRadius * RealRadius / Mass;
         static readonly Vector3 Gravity = new Vector3(0f, -9.81f, 0f);
 
         public static Vector3 Acceleration(Vector3 velocity, Vector3 spin)
@@ -53,7 +59,7 @@ namespace FirstPersonTennis
             if (w > 1e-3f)
             {
                 // 마그누스 양력 계수 Cl = 1 / (2 + v / rω)
-                float lift = 1f / (2f + speed / (Radius * w));
+                float lift = 1f / (2f + speed / (RealRadius * w));
                 a += AeroK * lift * speed / w * Vector3.Cross(spin, velocity);
             }
             return a;
@@ -113,7 +119,7 @@ namespace FirstPersonTennis
             float vOut = surface.restitution * vIn;
 
             // 접점의 미끄럼 속도 = 수평 속도 + ω × (0, -r, 0)
-            Vector3 slip = new Vector3(s.Velocity.x + Radius * s.Spin.z, 0f, s.Velocity.z - Radius * s.Spin.x);
+            Vector3 slip = new Vector3(s.Velocity.x + RealRadius * s.Spin.z, 0f, s.Velocity.z - RealRadius * s.Spin.x);
             float slipSpeed = slip.magnitude;
             if (slipSpeed > 1e-5f)
             {
@@ -125,8 +131,8 @@ namespace FirstPersonTennis
 
                 s.Velocity.x -= j * dir.x;
                 s.Velocity.z -= j * dir.z;
-                s.Spin.x += j * dir.z / (InertiaFactor * Radius);
-                s.Spin.z -= j * dir.x / (InertiaFactor * Radius);
+                s.Spin.x += j * dir.z / (InertiaFactor * RealRadius);
+                s.Spin.z -= j * dir.x / (InertiaFactor * RealRadius);
             }
             s.Velocity.y = vOut;
         }

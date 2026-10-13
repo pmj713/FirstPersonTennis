@@ -18,7 +18,6 @@ namespace FirstPersonTennis.EditorTools
         const string ScenePath = Root + "/Scenes/Phase1Court.unity";
         const string ConfigPath = Root + "/Settings/TennisConfig.asset";
         const string MaterialDir = Root + "/Materials";
-        const string MeshDir = Root + "/Meshes";
 
         [MenuItem("FirstPersonTennis/Build Phase 1 Scene")]
         public static void BuildFromMenu()
@@ -31,7 +30,7 @@ namespace FirstPersonTennis.EditorTools
         // unity run <project> -- -executeMethod FirstPersonTennis.EditorTools.Phase1SceneBuilder.Build
         public static void Build()
         {
-            foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir, MeshDir })
+            foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir })
                 EnsureFolder(folder);
 
             // 새 씬을 만들면 쓰이지 않는 에셋이 메모리에서 내려가므로, 에셋은 씬을 만든 뒤에 불러온다.
@@ -40,7 +39,16 @@ namespace FirstPersonTennis.EditorTools
             var m = new Materials();
             SetupLighting();
 
-            BuildCourt(m);
+            // 코트는 Play를 누를 때 설정 크기로 다시 만들어진다. 여기서는 에디터에서 보이도록 한 번 만들어 둔다.
+            var court = new GameObject("Court").AddComponent<CourtView>();
+            Set(court, "config", config);
+            Set(court, "surround", m.Surround);
+            Set(court, "courtSurface", m.CourtSurface);
+            Set(court, "line", m.Line);
+            Set(court, "net", m.Net);
+            Set(court, "post", m.Post);
+            court.Rebuild();
+
             TennisBall ball = CreateBall(m, config, out GameObject halo);
 
             // 플레이어 (근거리, side -1)
@@ -154,60 +162,6 @@ namespace FirstPersonTennis.EditorTools
             sun.transform.rotation = Quaternion.Euler(52f, -35f, 0f);
         }
 
-        static void BuildCourt(Materials m)
-        {
-            var court = new GameObject("Court").transform;
-
-            Transform ground = Primitive(PrimitiveType.Plane, "Ground", court, m.Surround);
-            ground.localScale = new Vector3(6f, 1f, 8f);
-
-            Transform surface = Flat("HardCourt", court, m.CourtSurface,
-                new Vector3(0f, 0.005f, 0f), new Vector2(Court.DoublesHalfWidth * 2f, Court.HalfLength * 2f));
-            surface.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
-
-            var lines = new GameObject("Lines").transform;
-            lines.SetParent(court, false);
-            const float Y = 0.01f, W = 0.05f, Baseline = 0.1f;
-            float length = Court.HalfLength * 2f;
-            foreach (float s in new[] { -1f, 1f })
-            {
-                Flat("Baseline", lines, m.Line, new Vector3(0f, Y, s * (Court.HalfLength - Baseline / 2f)),
-                    new Vector2(Court.DoublesHalfWidth * 2f, Baseline));
-                Flat("DoublesSideline", lines, m.Line, new Vector3(s * (Court.DoublesHalfWidth - W / 2f), Y, 0f),
-                    new Vector2(W, length));
-                Flat("SinglesSideline", lines, m.Line, new Vector3(s * (Court.SinglesHalfWidth - W / 2f), Y, 0f),
-                    new Vector2(W, length));
-                Flat("ServiceLine", lines, m.Line, new Vector3(0f, Y, s * (Court.ServiceLine - W / 2f)),
-                    new Vector2(Court.SinglesHalfWidth * 2f, W));
-                Flat("CenterMark", lines, m.Line, new Vector3(0f, Y, s * (Court.HalfLength - 0.15f)),
-                    new Vector2(W, 0.1f));
-            }
-            Flat("CenterServiceLine", lines, m.Line, new Vector3(0f, Y, 0f), new Vector2(W, Court.ServiceLine * 2f));
-
-            // 네트: 가운데 0.914m, 기둥 1.07m
-            var net = new GameObject("Net");
-            net.transform.SetParent(court, false);
-            net.AddComponent<MeshFilter>().sharedMesh = NetMesh();
-            var netRenderer = net.AddComponent<MeshRenderer>();
-            netRenderer.sharedMaterial = m.Net;
-            netRenderer.shadowCastingMode = ShadowCastingMode.Off;
-
-            float slope = Mathf.Atan2(Court.NetPostHeight - Court.NetCenterHeight, Court.NetPostX) * Mathf.Rad2Deg;
-            float tapeLength = new Vector2(Court.NetPostX, Court.NetPostHeight - Court.NetCenterHeight).magnitude;
-            float tapeY = (Court.NetPostHeight + Court.NetCenterHeight) / 2f - 0.025f;
-            foreach (float s in new[] { -1f, 1f })
-            {
-                Transform tape = Primitive(PrimitiveType.Cube, "NetTape", net.transform, m.Line);
-                tape.localPosition = new Vector3(s * Court.NetPostX / 2f, tapeY, 0f);
-                tape.localRotation = Quaternion.Euler(0f, 0f, s * slope);
-                tape.localScale = new Vector3(tapeLength, 0.05f, 0.03f);
-
-                Transform post = Primitive(PrimitiveType.Cylinder, "NetPost", net.transform, m.Post);
-                post.localPosition = new Vector3(s * Court.NetPostX, Court.NetPostHeight / 2f, 0f);
-                post.localScale = new Vector3(0.08f, Court.NetPostHeight / 2f, 0.08f);
-            }
-        }
-
         static TennisBall CreateBall(Materials m, TennisConfig config, out GameObject halo)
         {
             Transform ball = Primitive(PrimitiveType.Sphere, "Ball", null, m.Ball);
@@ -268,29 +222,6 @@ namespace FirstPersonTennis.EditorTools
             return go.transform;
         }
 
-        static Mesh NetMesh()
-        {
-            string path = MeshDir + "/Net.asset";
-            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
-            if (mesh == null)
-            {
-                mesh = new Mesh { name = "Net" };
-                AssetDatabase.CreateAsset(mesh, path);
-            }
-            mesh.Clear();
-            float x = Court.NetPostX;
-            mesh.vertices = new[]
-            {
-                new Vector3(-x, 0f, 0f), new Vector3(x, 0f, 0f), new Vector3(x, Court.NetPostHeight, 0f),
-                new Vector3(0f, Court.NetCenterHeight, 0f), new Vector3(-x, Court.NetPostHeight, 0f),
-            };
-            mesh.triangles = new[] { 0, 4, 3, 0, 3, 1, 1, 3, 2 };
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            EditorUtility.SetDirty(mesh);
-            return mesh;
-        }
-
         static Transform Primitive(PrimitiveType type, string name, Transform parent, Material material)
         {
             GameObject go = GameObject.CreatePrimitive(type);
@@ -299,17 +230,6 @@ namespace FirstPersonTennis.EditorTools
             if (parent != null) go.transform.SetParent(parent, false);
             go.GetComponent<Renderer>().sharedMaterial = material;
             return go.transform;
-        }
-
-        // 바닥에 눕힌 사각형 (size.x = 너비, size.y = z 방향 길이)
-        static Transform Flat(string name, Transform parent, Material material, Vector3 center, Vector2 size)
-        {
-            Transform t = Primitive(PrimitiveType.Quad, name, parent, material);
-            t.localPosition = center;
-            t.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            t.localScale = new Vector3(size.x, size.y, 1f);
-            t.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
-            return t;
         }
 
         // ── 에셋 ─────────────────────────────────────────────────

@@ -55,8 +55,8 @@ namespace FirstPersonTennis
             Velocity = Vector3.MoveTowards(Velocity, desired, config.dummyAcceleration * dt);
 
             Vector3 p = transform.position + Velocity * dt;
-            p.x = Mathf.Clamp(p.x, -9f, 9f);
-            p.z = Mathf.Clamp(p.z * Side, 0.5f, 17f) * Side;
+            p.x = Mathf.Clamp(p.x, -Court.PlayableHalfWidth, Court.PlayableHalfWidth);
+            p.z = Mathf.Clamp(p.z * Side, 0.5f, Court.PlayableDepth) * Side;
             transform.position = p;
         }
 

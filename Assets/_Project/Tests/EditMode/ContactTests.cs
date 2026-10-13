@@ -36,8 +36,8 @@ namespace FirstPersonTennis.Tests
         {
             // 정점이 높은 깊은 탑스핀을 네트 쪽(z = -5)에서 스매시
             Trajectory t = IncomingFrom(new Vector3(0f, 1f, 12.7f), -9.3f, 20.25f, 129f);
-            Assert.IsTrue(AutoSwing.FindAirSmashIndex(t, t.FirstBounceIndex, -5f, 1f, Forward, 2f, 3.2f, out int k));
-            Assert.That(t.Positions[k].y, Is.InRange(2f, 3.2f));
+            Assert.IsTrue(SmashInAir(t, -5f, out int k));
+            Assert.That(t.Positions[k].y, Is.InRange(SmashAirMin, SmashMax));
             Assert.Less(k, t.FirstBounceIndex);
         }
 
@@ -45,11 +45,16 @@ namespace FirstPersonTennis.Tests
         public void LobOverTheNetPlayerIsTooHighToSmash()
         {
             var from = new Vector3(0f, 1f, 12.7f);
-            ShotSolution s = ShotSolver.SolveFixedAngle(from, new Vector3(0.8f, 0f, -9.6f), 50f, 67f, Hard);
+            ShotSolution s = ShotSolver.SolveFixedAngle(from, new Vector3(0.8f, 0f, -9.6f), 50f, 120f, Hard);
             var t = new Trajectory(2000);
             t.Simulate(new BallState(from, s.Velocity, s.Spin), Hard);
-            Assert.IsFalse(AutoSwing.FindAirSmashIndex(t, t.FirstBounceIndex, -3f, 1f, Forward, 2f, 3.2f, out _));
+            Assert.IsFalse(SmashInAir(t, -3f, out _));
         }
+
+        const float SmashAirMin = 1.6f, SmashMax = 3.5f;
+
+        static bool SmashInAir(Trajectory t, float bodyZ, out int index) =>
+            AutoSwing.FindAirSmashIndex(t, t.FirstBounceIndex, bodyZ, 1f, Forward, 1f, SmashAirMin, SmashMax, 2.6f, out index);
 
         [TestCase(3.1f, -2f)]
         [TestCase(3.1f, -12.3f)]

@@ -14,6 +14,8 @@ namespace FirstPersonTennis
         [SerializeField] PlayerMovement player;
         [SerializeField] DummyOpponent dummy;
 
+        public TennisBall Ball => ball;
+        public DummyOpponent Dummy => dummy;
         public int PlayerPoints { get; private set; }
         public int DummyPoints { get; private set; }
         public int PlayerReturns { get; private set; }

@@ -245,7 +245,9 @@ namespace FirstPersonTennis
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
             float spin = p.spin * pace * pace;
 
-            var target = new Vector3(aim * config.maxAimX * facing, 0f, depth * facing);
+            depth *= Court.LengthScale; // 구질별 깊이는 ITF 길이 기준
+            float maxAimX = Court.SinglesHalfWidth - config.aimMargin;
+            var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
             if (p.launchAngle > 0f)
                 return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, config.surface);
             return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace, spin, config.surface, minAngle);

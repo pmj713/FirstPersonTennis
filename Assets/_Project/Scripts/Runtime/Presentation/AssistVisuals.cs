@@ -28,7 +28,7 @@ namespace FirstPersonTennis
 
             Vector3 b = ball.transform.position;
             ballShadow.position = new Vector3(b.x, 0.015f, b.z);
-            float size = Mathf.Lerp(0.09f, 0.16f, Mathf.Clamp01(b.y / 6f));
+            float size = Mathf.Lerp(0.09f, 0.16f, Mathf.Clamp01(b.y / 6f)) * (BallPhysics.Radius / BallPhysics.RealRadius);
             ballShadow.localScale = new Vector3(size, 1f, size);
 
             bool showLanding = config.showLandingMarker && playerSwing.HasLanding &&

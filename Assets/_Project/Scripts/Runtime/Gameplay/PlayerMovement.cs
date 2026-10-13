@@ -75,8 +75,8 @@ namespace FirstPersonTennis
 
         Vector3 Clamp(Vector3 p)
         {
-            p.x = Mathf.Clamp(p.x, -9f, 9f);
-            float depth = Mathf.Clamp(p.z * side, 0.5f, 17f);
+            p.x = Mathf.Clamp(p.x, -Court.PlayableHalfWidth, Court.PlayableHalfWidth);
+            float depth = Mathf.Clamp(p.z * side, 0.5f, Court.PlayableDepth);
             p.z = depth * side;
             p.y = 0f;
             return p;

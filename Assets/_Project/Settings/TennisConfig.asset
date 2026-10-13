@@ -16,6 +16,9 @@ MonoBehaviour:
     name: Hard
     restitution: 0.73
     friction: 0.55
+  courtWidthScale: 2
+  courtLengthScale: 1
+  ballDiameter: 0.067
   walkSpeed: 4
   runSpeed: 7
   acceleration: 30
@@ -35,14 +38,14 @@ MonoBehaviour:
   followThrough: 0.35
   takeBackLead: 0.9
   topspin:
-    speed: 27
-    shortSpeed: 27
-    spin: 230
+    speed: 32
+    shortSpeed: 32
+    spin: 160
     minDepth: 7
     maxDepth: 9.3
     launchAngle: 0
   slice:
-    speed: 21
+    speed: 24
     shortSpeed: 11
     spin: -150
     minDepth: 2.2
@@ -77,6 +80,6 @@ MonoBehaviour:
   dummyErrorScale: 0.5
   dummySliceChance: 0.15
   dummyLobChance: 0.1
-  feedSpeedScale: 0.75
+  feedSpeedScale: 1
   pointResetDelay: 1.6
   feedDelay: 1

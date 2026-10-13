@@ -20,6 +20,7 @@ namespace FirstPersonTennis
             "좌클릭 드래그  ←→ 방향 · ↓ 슬라이스 · ↑ 로브 · ↑↓ 스매시",
             "클릭만  탑스핀 가운데",
             "우클릭  이번 공 보내기",
+            "- =  공 템포 (1 = 실제 속도) · M 미니맵",
             "V 시점 전환 · [ ] 시야각 · R 범위 링 · T 슬로모션 · H 도움말",
         };
 
@@ -27,6 +28,19 @@ namespace FirstPersonTennis
         string message;
         float messageUntil;
         bool showHelp = true;
+        bool showMinimap;
+        Texture2D dot;
+
+        void Start()
+        {
+            showMinimap = config.showMinimap;
+            dot = CreateDotTexture();
+        }
+
+        void OnDestroy()
+        {
+            if (dot != null) Destroy(dot);
+        }
 
         void OnEnable()
         {
@@ -49,7 +63,20 @@ namespace FirstPersonTennis
             Keyboard kb = Keyboard.current;
             if (kb == null) return;
             if (kb.hKey.wasPressedThisFrame) showHelp = !showHelp;
+            if (kb.mKey.wasPressedThisFrame) showMinimap = !showMinimap;
             if (kb.tKey.wasPressedThisFrame) Time.timeScale = Time.timeScale < 1f ? 1f : 0.5f;
+            if (kb.minusKey.wasPressedThisFrame) ChangeBallTempo(-0.05f);
+            if (kb.equalsKey.wasPressedThisFrame) ChangeBallTempo(0.05f);
+        }
+
+        // 공의 시간 배율을 바꾼다. 설정 파일에 저장되어 다음 플레이에도 유지된다.
+        void ChangeBallTempo(float delta)
+        {
+            config.ballTimeScale = Mathf.Clamp(Mathf.Round((config.ballTimeScale + delta) * 100f) / 100f, 0.4f, 2f);
+#if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(config);
+#endif
+            Show($"공 템포 {config.ballTimeScale:0.00}");
         }
 
         void OnPointEnded(int winner, PointReason reason)
@@ -94,8 +121,11 @@ namespace FirstPersonTennis
             if (input.IsDragging)
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
 
-            GUI.Label(new Rect(w - 330f, 12f, 320f, 24f),
+            if (showMinimap) DrawMinimap();
+
+            GUI.Label(new Rect(w - 430f, 12f, 420f, 24f),
                 (cameraRig.ThirdPerson ? "3인칭 (디버그)" : "1인칭") + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
+                $" · 공 템포 {config.ballTimeScale:0.00}" +
                 (Time.timeScale < 1f ? " · 슬로모션" : ""),
                 smallRight);
 
@@ -105,6 +135,67 @@ namespace FirstPersonTennis
                 for (int i = 0; i < HelpLines.Length; i++)
                     GUI.Label(new Rect(20f, 16f + 24f * i, 520f, 24f), HelpLines[i], small);
             }
+        }
+
+        // 위에서 본 코트. 내 코트가 아래쪽, 내 오른쪽이 오른쪽.
+        void DrawMinimap()
+        {
+            float halfW = Court.PlayableHalfWidth, halfD = Court.PlayableDepth;
+            float s = Mathf.Min(170f / (2f * halfW), 260f / (2f * halfD));
+            var area = new Rect(Screen.width - 2f * halfW * s - 14f, 42f, 2f * halfW * s, 2f * halfD * s);
+            Vector2 c = area.center;
+            float f = Court.Facing(player.Side);
+            Vector2 Map(Vector3 p) => new Vector2(c.x + p.x * s * f, c.y - p.z * s * f);
+
+            void WorldRect(float x0, float z0, float x1, float z1, Color color)
+            {
+                Vector2 a = Map(new Vector3(x0, 0f, z0)), b = Map(new Vector3(x1, 0f, z1));
+                Fill(new Rect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y),
+                    Mathf.Max(1f, Mathf.Abs(b.x - a.x)), Mathf.Max(1f, Mathf.Abs(b.y - a.y))), color);
+            }
+
+            float hl = Court.HalfLength, sw = Court.SinglesHalfWidth, dw = Court.DoublesHalfWidth, sl = Court.ServiceLine;
+            var line = new Color(1f, 1f, 1f, 0.85f);
+            Fill(area, new Color(0.08f, 0.3f, 0.2f, 0.75f));
+            WorldRect(-dw, -hl, dw, hl, new Color(0.15f, 0.35f, 0.65f, 0.9f));
+            foreach (float z in new[] { -hl, hl }) WorldRect(-dw, z, dw, z, line);
+            foreach (float x in new[] { -dw, -sw, sw, dw }) WorldRect(x, -hl, x, hl, line);
+            foreach (float z in new[] { -sl, sl }) WorldRect(-sw, z, sw, z, line);
+            WorldRect(0f, -sl, 0f, sl, line);
+            WorldRect(-Court.NetPostX, -0.15f, Court.NetPostX, 0.15f, new Color(0.85f, 0.85f, 0.85f));
+
+            if (playerSwing.HasLanding && Court.SideOf(playerSwing.LandingPoint.z) == player.Side)
+                Dot(Map(playerSwing.LandingPoint), 10f, new Color(1f, 0.85f, 0.1f));
+            Dot(Map(referee.Dummy.transform.position), 9f, new Color(0.95f, 0.3f, 0.25f));
+            Dot(Map(player.transform.position), 9f, new Color(0.35f, 0.6f, 1f));
+            Dot(Map(referee.Ball.transform.position), 6f, Color.white);
+
+            GUI.Label(new Rect(area.x - 60f, area.yMax + 2f, area.width + 60f, 20f), "파랑 나 · 노랑 낙하", smallRight);
+        }
+
+        void Dot(Vector2 center, float size, Color color)
+        {
+            Color previous = GUI.color;
+            GUI.color = color;
+            GUI.DrawTexture(new Rect(center.x - size / 2f, center.y - size / 2f, size, size), dot);
+            GUI.color = previous;
+        }
+
+        static Texture2D CreateDotTexture()
+        {
+            const int N = 32;
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, false) { hideFlags = HideFlags.DontSave };
+            var pixels = new Color32[N * N];
+            float r = N / 2f - 1f;
+            for (int y = 0; y < N; y++)
+            for (int x = 0; x < N; x++)
+            {
+                float d = new Vector2(x - (N - 1) / 2f, y - (N - 1) / 2f).magnitude;
+                pixels[y * N + x] = new Color32(255, 255, 255, (byte)(Mathf.Clamp01(r - d) * 255f));
+            }
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return tex;
         }
 
         void DrawStamina(Rect r)

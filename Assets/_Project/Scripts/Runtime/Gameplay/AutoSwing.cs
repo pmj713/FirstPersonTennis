@@ -38,6 +38,9 @@ namespace FirstPersonTennis
         ShotIntent lockedIntent;
 
         float Facing => Court.Facing(side);
+
+        // 공 물리 스텝 수 → 실제 시간(초). 공은 자기 템포(공 템포 × 샷 배율)로 진행한다.
+        float RealSeconds(long steps) => steps * BallPhysics.Step / ball.TimeScale;
         bool Incoming => ball.IsLive && ball.LastHitterSide == -side;
 
         void Awake()
@@ -78,7 +81,7 @@ namespace FirstPersonTennis
 
             if (IsSwinging)
             {
-                TimeToContact = (impactStep - ball.StepIndex) * BallPhysics.Step;
+                TimeToContact = RealSeconds(impactStep - ball.StepIndex);
                 if (ball.StepIndex > impactStep)
                 {
                     IsSwinging = false; // 임팩트 스텝을 놓쳤다 (포인트 리셋 등)
@@ -107,7 +110,7 @@ namespace FirstPersonTennis
             Vector3 point = trajectory.Positions[index];
             HasContact = true;
             ContactPoint = point;
-            TimeToContact = index * BallPhysics.Step;
+            TimeToContact = RealSeconds(index);
             Evaluate(point, smash, out bool inHit, out bool inSwing, out float lateral);
             ContactInHitZone = inHit;
             ContactInSwingZone = inSwing;
@@ -119,7 +122,7 @@ namespace FirstPersonTennis
                 racket.SetPreparation(PredictedStroke, intent.Type, prep);
             }
 
-            int windupSteps = Mathf.CeilToInt(config.swingWindup / BallPhysics.Step);
+            int windupSteps = Mathf.CeilToInt(config.swingWindup * ball.TimeScale / BallPhysics.Step);
             if (hasIntent && inSwing && index >= 1 && index <= windupSteps)
                 StartSwing(intent, ball.StepIndex + index, TimeToContact);
         }
@@ -207,7 +210,9 @@ namespace FirstPersonTennis
                 if (axis.sqrMagnitude > 1e-6f) velocity = Quaternion.AngleAxis(-elevation, axis.normalized) * velocity;
             }
 
-            ball.Launch(side, velocity, spin);
+            // 머리 위에서 친 스매시는 빠르게 날아간다
+            bool overhead = intent.Type == ShotType.Smash && contact.y >= config.smashMinHeight;
+            ball.Launch(side, velocity, spin, overhead ? config.smashTempoBoost : 1f);
         }
 
         // 0 = 완벽, 클수록 오차가 커진다
@@ -216,8 +221,9 @@ namespace FirstPersonTennis
             // 스매시는 머리 위가 이상적 타점이다 (낮은 공에 스매시를 입력하면 플랫 스트로크라 허리 높이 기준)
             bool overhead = intent.Type == ShotType.Smash && contact.y >= config.smashMinHeight;
             float idealHeight = overhead ? config.smashIdealHeight : config.idealHeight;
-            float lateralError = Mathf.Abs(Mathf.Abs(lateral) - config.idealLateral) / config.hitReach;
-            float heightError = Mathf.Abs(contact.y - idealHeight) / 1.5f;
+            float idealLateral = overhead ? config.smashIdealLateral : config.idealLateral;
+            float lateralError = Mathf.Abs(Mathf.Abs(lateral) - idealLateral) / config.hitReach;
+            float heightError = overhead ? Mathf.Abs(contact.y - idealHeight) / 1.5f : StrokeHeightError(contact.y);
             float bad = 0.6f * lateralError + 0.6f * heightError;
             if (mover != null)
             {
@@ -229,19 +235,32 @@ namespace FirstPersonTennis
             return Mathf.Clamp(bad, 0f, 1.5f);
         }
 
-        // 스매시 입력이면 팔과 라켓을 위로 뻗은 높이까지 닿는다
+        // 스트로크의 높이 오차: 낮은 공 기준 아래는 줄여서 적용하고, 기준 위 0.5m 동안 원래 값으로 이어 붙인다.
+        // 그보다 높은 공은 예전과 같다.
+        float StrokeHeightError(float y)
+        {
+            const float Blend = 0.5f;
+            float low = config.lowBallHeight;
+            float Full(float h) => Mathf.Abs(h - config.idealHeight) / 1.5f;
+            if (y <= low) return Full(y) * config.lowBallErrorScale;
+            return Mathf.Lerp(Full(low) * config.lowBallErrorScale, Full(y), Mathf.Clamp01((y - low) / Blend));
+        }
+
+        // 스매시 입력이면 판정이 넓다: 더 높이, 더 옆으로, 앞뒤로 더 여유 있게 닿는다
         void Evaluate(Vector3 point, bool smash, out bool inHit, out bool inSwing, out float lateral)
         {
             Vector3 body = transform.position;
             lateral = (point.x - body.x) * Facing;
             float forward = (point.z - body.z) * Facing - config.contactForward;
             float reach = Mathf.Abs(lateral);
-            bool depthOk = Mathf.Abs(forward) <= config.contactDepthTolerance;
+            float reachLimit = smash ? config.smashHitReach : config.hitReach;
+            float depthTolerance = smash ? config.smashDepthTolerance : config.contactDepthTolerance;
             float maxHeight = smash ? config.smashReachHeight : config.maxHitHeight;
+            bool depthOk = Mathf.Abs(forward) <= depthTolerance;
 
-            inHit = depthOk && reach <= config.hitReach &&
+            inHit = depthOk && reach <= reachLimit &&
                     point.y >= config.minHitHeight && point.y <= maxHeight;
-            inSwing = depthOk && reach <= config.hitReach + config.swingReachExtra &&
+            inSwing = depthOk && reach <= reachLimit + config.swingReachExtra &&
                       point.y <= maxHeight + 0.5f;
         }
 
@@ -276,30 +295,39 @@ namespace FirstPersonTennis
             {
                 int beforeBounce = trajectory.FirstBounceIndex >= 0 ? trajectory.FirstBounceIndex : trajectory.Count - 1;
                 if (FindAirSmashIndex(trajectory, beforeBounce, transform.position.z, Facing, config.contactForward,
-                        config.smashMinHeight, config.smashReachHeight, out index))
+                        config.smashDepthTolerance, config.smashAirMinHeight, config.smashReachHeight,
+                        config.smashIdealHeight, out index))
                     return true;
             }
+            float depthTolerance = smash ? config.smashDepthTolerance : config.contactDepthTolerance;
             return TryGetWindow(out int start, out int end) &&
                    FindContactIndex(trajectory, start, end, transform.position.z, Facing,
-                       config.contactForward, config.contactDepthTolerance, config.minHitHeight, out index);
+                       config.contactForward, depthTolerance, config.minHitHeight, out index);
         }
 
-        // 바운드 전 [0, end] 구간에서 공이 타점 평면을 지날 때 머리 위 높이면 그 샘플 (공중 스매시)
+        // 공중 스매시: 바운드 전 [1, end]에서 공이 타점 평면 앞뒤 depthTolerance 안을 지나는 동안,
+        // [minHeight, maxHeight] 높이 중 idealHeight에 가장 가까운 샘플
         public static bool FindAirSmashIndex(Trajectory t, int end, float bodyZ, float facing, float contactForward,
-            float minHeight, float maxHeight, out int index)
+            float depthTolerance, float minHeight, float maxHeight, float idealHeight, out int index)
         {
             index = -1;
             float planeZ = bodyZ + contactForward * facing;
-            if ((t.Positions[0].z - planeZ) * facing <= 0f) return false; // 이미 지나감
-            for (int k = 1; k <= end; k++)
+            float best = float.MaxValue;
+            for (int k = 1; k <= end && k < t.Count; k++)
             {
-                if ((t.Positions[k].z - planeZ) * facing > 0f) continue;
+                float ahead = (t.Positions[k].z - planeZ) * facing;
+                if (ahead > depthTolerance) continue;  // 아직 멀다
+                if (ahead < -depthTolerance) break;    // 이미 지나갔다
                 float y = t.Positions[k].y;
-                if (y < minHeight || y > maxHeight) return false;
-                index = k;
-                return true;
+                if (y < minHeight || y > maxHeight) continue;
+                float score = Mathf.Abs(y - idealHeight);
+                if (score < best)
+                {
+                    best = score;
+                    index = k;
+                }
             }
-            return false;
+            return index >= 0;
         }
 
         // 바운드 후 [start, end] 구간에서 공을 칠 샘플을 찾는다.

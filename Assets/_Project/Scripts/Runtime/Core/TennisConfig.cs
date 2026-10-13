@@ -8,6 +8,15 @@ namespace FirstPersonTennis
     {
         [Header("코트")]
         public SurfaceProfile surface = SurfaceProfile.Hard;
+        [Tooltip("좌우 너비 배율. 1 = ITF 규격 (단식 8.23m, 복식 10.97m). Play를 누르면 반영된다.")]
+        [Range(0.5f, 3f)] public float courtWidthScale = 1f;
+        [Tooltip("앞뒤 길이 배율. 1 = ITF 규격 (23.77m). 샷 목표 깊이도 같이 늘어난다. Play를 누르면 반영된다.")]
+        [Range(0.5f, 2f)] public float courtLengthScale = 1f;
+
+        [Header("공")]
+        [Tooltip("공 지름 (m). 실제 공은 0.067m. 보이는 크기와 바닥·네트 충돌 판정이 바뀌고, " +
+                 "공기저항·스핀은 실제 공 그대로다. Play를 누르면 반영된다.")]
+        [Range(0.03f, 0.3f)] public float ballDiameter = 0.067f;
 
         [Header("이동")]
         public float walkSpeed = 4f;
@@ -45,10 +54,20 @@ namespace FirstPersonTennis
         [Header("스매시")]
         [Tooltip("이 높이 이상에서 치면 스매시, 낮으면 강한 플랫 스트로크 (m)")]
         public float smashMinHeight = 2.0f;
-        [Tooltip("스매시 입력일 때 닿는 최고 높이 (m). 키 1.8m + 팔과 라켓을 위로 뻗은 높이")]
-        public float smashReachHeight = 3.2f;
+        [Tooltip("스매시 입력일 때 닿는 최고 높이 (m). 키 1.8m + 팔과 라켓을 위로 뻗고 살짝 뛴 높이")]
+        public float smashReachHeight = 3.5f;
+        [Tooltip("스매시 입력일 때 좌우로 닿는 거리 (m). 일반 타격(hitReach)보다 넓다")]
+        public float smashHitReach = 2.0f;
+        [Tooltip("스매시 입력일 때 타점 앞뒤 허용 거리 (m). 일반 타격(contactDepthTolerance)보다 넓다")]
+        public float smashDepthTolerance = 1.0f;
+        [Tooltip("공중 스매시로 칠 수 있는 최저 높이 (m). smashMinHeight 아래에서 치면 강한 플랫으로 나간다")]
+        public float smashAirMinHeight = 1.6f;
         [Tooltip("스매시 오차 계산에 쓰는 이상적 타점 높이 (m)")]
         public float smashIdealHeight = 2.6f;
+        [Tooltip("스매시의 이상적 좌우 거리 (m). 오른쪽 어깨 위")]
+        public float smashIdealLateral = 0.4f;
+        [Tooltip("스매시로 친 공의 템포 배율. 공 템포에 곱한다 (0.7 × 1.5 = 1.05). 1이면 다른 샷과 같은 템포")]
+        [Range(1f, 3f)] public float smashTempoBoost = 1.5f;
 
         [Header("스윙")]
         [Tooltip("스윙 시작부터 임팩트까지 (초)")]
@@ -57,16 +76,27 @@ namespace FirstPersonTennis
         [Tooltip("임팩트 몇 초 전부터 라켓을 뒤로 빼기 시작하는지")]
         public float takeBackLead = 0.9f;
 
+        [Header("템포")]
+        [Tooltip("공의 시간 배율. 공의 물리만 이만큼 느리게 진행한다. 궤적은 실제 테니스 그대로 낮게 유지되고 " +
+                 "날아오는 시간만 길어진다 (1/배율). 선수 이동과 스윙은 실제 시간. 낮출수록 공이 떠 있는 느낌이 난다.")]
+        [Range(0.4f, 2f)] public float ballTimeScale = 0.7f;
+
         [Header("구질")]
-        [Tooltip("모든 샷의 속도 배율. 1 = 실제 랠리 속도. 스핀은 배율의 제곱으로 줄여 궤적 모양을 유지한다. " +
-                 "0.7 아래로 내리면 깊은 공을 보내려고 공이 높이 뜬다.")]
-        [Range(0.5f, 1.2f)] public float shotSpeedScale = 0.75f;
-        public ShotProfile topspin = new ShotProfile { speed = 27f, shortSpeed = 27f, spin = 230f, minDepth = 7f, maxDepth = 9.3f };
-        public ShotProfile slice = new ShotProfile { speed = 21f, shortSpeed = 11f, spin = -150f, minDepth = 2.2f, maxDepth = 9.5f };
+        [Tooltip("모든 샷의 속도 배율. 1 = 실제 랠리 속도. 스핀은 배율의 제곱으로 줄인다. " +
+                 "낮추면 깊은 공을 보내려고 공이 높이 뜨므로, 템포는 공의 시간 배율로 조절하는 걸 권장.")]
+        [Range(0.5f, 1.2f)] public float shotSpeedScale = 1f;
+        public ShotProfile topspin = new ShotProfile { speed = 32f, shortSpeed = 32f, spin = 160f, minDepth = 7f, maxDepth = 9.3f };
+        public ShotProfile slice = new ShotProfile { speed = 24f, shortSpeed = 11f, spin = -150f, minDepth = 2.2f, maxDepth = 9.5f };
         public ShotProfile lob = new ShotProfile { spin = 120f, minDepth = 8.5f, maxDepth = 10.8f, launchAngle = 50f };
         public ShotProfile smash = new ShotProfile { speed = 34f, shortSpeed = 34f, spin = 40f, minDepth = 7f, maxDepth = 9f };
-        [Tooltip("좌우로 최대한 밀었을 때 목표 x (m)")]
-        public float maxAimX = 3.3f;
+        [Tooltip("좌우로 최대한 밀었을 때 목표 지점이 단식 사이드라인에서 안쪽으로 떨어진 거리 (m)")]
+        public float aimMargin = 0.8f;
+
+        [Header("낮은 공")]
+        [Tooltip("이 높이 아래로 오는 공은 높이 때문에 생기는 오차를 줄인다 (m)")]
+        public float lowBallHeight = 1.3f;
+        [Tooltip("낮은 공의 높이 오차 배율. 0 = 높이로 인한 오차 없음, 1 = 줄이지 않음")]
+        [Range(0f, 1f)] public float lowBallErrorScale = 0.2f;
 
         [Header("타구 오차 (도)")]
         public float baseElevationError = 0.5f;
@@ -78,6 +108,8 @@ namespace FirstPersonTennis
         [Tooltip("보조 많음: 선입력이 없으면 기본 스트로크를 자동으로 친다")]
         public bool autoStrokeWhenNoInput;
         public bool showLandingMarker = true;
+        [Tooltip("위에서 본 코트 미니맵 (플레이 중 M 키로 켜고 끔)")]
+        public bool showMinimap = true;
         public bool showHitRangeRing = true;
         public bool hitZoneAlert = true;
 
@@ -88,11 +120,23 @@ namespace FirstPersonTennis
         [Range(0f, 1f)] public float dummyErrorScale = 0.5f;
         [Range(0f, 1f)] public float dummySliceChance = 0.15f;
         [Range(0f, 1f)] public float dummyLobChance = 0.1f;
-        [Tooltip("허수아비가 포인트를 시작할 때 보내는 공의 속도 배율")]
-        public float feedSpeedScale = 0.75f;
+        [Tooltip("허수아비가 포인트를 시작할 때 보내는 공의 속도 배율. 낮추면 깊이 보내려고 공이 높이 뜬다.")]
+        public float feedSpeedScale = 1f;
 
         [Header("포인트")]
         public float pointResetDelay = 1.6f;
         public float feedDelay = 1f;
+
+        // Inspector에서 값이 바뀔 때 (에디터 전용). 코트와 공이 바로 다시 그려진다.
+        public static event System.Action<TennisConfig> Changed;
+
+        void OnValidate() => Changed?.Invoke(this);
+
+        // 코트 크기와 공 크기를 전역(Court, BallPhysics)에 적용한다. 코트를 만들 때와 공이 생길 때 호출된다.
+        public void ApplyGlobals()
+        {
+            Court.Configure(courtWidthScale, courtLengthScale);
+            BallPhysics.SetRadius(ballDiameter * 0.5f);
+        }
     }
 }
