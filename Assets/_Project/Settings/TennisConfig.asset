@@ -1,0 +1,82 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03355a96bd7b9374a82e5b9dfbdeb6ab, type: 3}
+  m_Name: TennisConfig
+  m_EditorClassIdentifier: FirstPersonTennis::FirstPersonTennis.TennisConfig
+  surface:
+    name: Hard
+    restitution: 0.73
+    friction: 0.55
+  walkSpeed: 4
+  runSpeed: 7
+  acceleration: 30
+  eyeHeight: 1.7
+  sprintDistance: 5
+  staminaRecoveryPerSecond: 0.3
+  staminaResumeThreshold: 0.5
+  hitReach: 1.5
+  swingReachExtra: 0.5
+  minHitHeight: 0.2
+  maxHitHeight: 2.5
+  contactForward: 0.45
+  contactDepthTolerance: 0.6
+  idealLateral: 0.8
+  idealHeight: 1
+  swingWindup: 0.25
+  followThrough: 0.35
+  takeBackLead: 0.9
+  topspin:
+    speed: 27
+    shortSpeed: 27
+    spin: 230
+    minDepth: 7
+    maxDepth: 9.3
+    launchAngle: 0
+  slice:
+    speed: 21
+    shortSpeed: 11
+    spin: -150
+    minDepth: 2.2
+    maxDepth: 9.5
+    launchAngle: 0
+  lob:
+    speed: 0
+    shortSpeed: 0
+    spin: 120
+    minDepth: 8.5
+    maxDepth: 10.8
+    launchAngle: 50
+  smash:
+    speed: 34
+    shortSpeed: 34
+    spin: 40
+    minDepth: 7
+    maxDepth: 9
+    launchAngle: 0
+  maxAimX: 3.3
+  baseElevationError: 0.5
+  elevationErrorPerBad: 2
+  baseAzimuthError: 0.6
+  azimuthErrorPerBad: 2.5
+  autoStrokeWhenNoInput: 0
+  showLandingMarker: 1
+  showHitRangeRing: 1
+  hitZoneAlert: 1
+  dummySpeed: 6.5
+  dummyAcceleration: 25
+  dummyReactionDelay: 0.2
+  dummyErrorScale: 0.5
+  dummySliceChance: 0.15
+  dummyLobChance: 0.1
+  feedSpeedScale: 0.75
+  pointResetDelay: 1.6
+  feedDelay: 1
