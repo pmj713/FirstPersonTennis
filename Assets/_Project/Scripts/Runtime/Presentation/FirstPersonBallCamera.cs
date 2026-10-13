@@ -4,7 +4,8 @@ using UnityEngine.InputSystem;
 namespace FirstPersonTennis
 {
     // 1인칭: 머리 위치에서 공을 따라본다. 회전 속도에 상한을 둬서 급회전(멀미)을 막는다.
-    // V 키로 비교 테스트용 3인칭 디버그 카메라로 전환.
+    // V 키로 비교 테스트용 3인칭 디버그 카메라로 전환. [ ] 키로 시야각 조절.
+    // 시야각은 16:9 기준 수평값이고 세로 시야각을 고정하므로, 창이 넓으면 옆이 더 보이고 좁아도 왜곡되지 않는다.
     [RequireComponent(typeof(Camera))]
     public class FirstPersonBallCamera : MonoBehaviour
     {
@@ -14,25 +15,37 @@ namespace FirstPersonTennis
         [SerializeField] Renderer[] hideInFirstPerson;
         [SerializeField] float maxTurnSpeed = 300f;
         [SerializeField] float turnSharpness = 10f;
-        [SerializeField] float horizontalFov = 90f;
         [SerializeField] float maxPitch = 75f;
         [SerializeField] Vector3 thirdPersonOffset = new Vector3(0f, 3.2f, -6.5f);
 
         public bool ThirdPerson { get; private set; }
+        public float HorizontalFov { get; private set; }
+
+        const float FovStep = 5f;
+        const float ReferenceAspect = 16f / 9f;
 
         Camera cam;
 
         void Awake() => cam = GetComponent<Camera>();
 
-        void Start() => ApplyVisibility();
+        void Start()
+        {
+            HorizontalFov = config.horizontalFov;
+            ApplyVisibility();
+        }
 
         void LateUpdate()
         {
             Keyboard kb = Keyboard.current;
-            if (kb != null && kb.vKey.wasPressedThisFrame)
+            if (kb != null)
             {
-                ThirdPerson = !ThirdPerson;
-                ApplyVisibility();
+                if (kb.vKey.wasPressedThisFrame)
+                {
+                    ThirdPerson = !ThirdPerson;
+                    ApplyVisibility();
+                }
+                if (kb.leftBracketKey.wasPressedThisFrame) HorizontalFov = Mathf.Max(50f, HorizontalFov - FovStep);
+                if (kb.rightBracketKey.wasPressedThisFrame) HorizontalFov = Mathf.Min(110f, HorizontalFov + FovStep);
             }
 
             float dt = Time.unscaledDeltaTime;
@@ -58,7 +71,7 @@ namespace FirstPersonTennis
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, smooth, maxTurnSpeed * dt);
             }
 
-            cam.fieldOfView = Camera.HorizontalToVerticalFieldOfView(horizontalFov, cam.aspect);
+            cam.fieldOfView = Camera.HorizontalToVerticalFieldOfView(HorizontalFov, ReferenceAspect);
         }
 
         Quaternion ClampPitch(Quaternion q)

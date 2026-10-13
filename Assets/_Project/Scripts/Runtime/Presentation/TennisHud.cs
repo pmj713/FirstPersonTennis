@@ -20,7 +20,7 @@ namespace FirstPersonTennis
             "좌클릭 드래그  ←→ 방향 · ↓ 슬라이스 · ↑ 로브 · ↑↓ 스매시",
             "클릭만  탑스핀 가운데",
             "우클릭  이번 공 보내기",
-            "V 시점 전환 · R 범위 링 · T 슬로모션 · H 도움말",
+            "V 시점 전환 · [ ] 시야각 · R 범위 링 · T 슬로모션 · H 도움말",
         };
 
         GUIStyle text, small, title, banner, textCenter, smallCenter, smallRight;
@@ -95,14 +95,15 @@ namespace FirstPersonTennis
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
 
             GUI.Label(new Rect(w - 330f, 12f, 320f, 24f),
-                (cameraRig.ThirdPerson ? "3인칭 (디버그)" : "1인칭") + (Time.timeScale < 1f ? " · 슬로모션" : ""),
+                (cameraRig.ThirdPerson ? "3인칭 (디버그)" : "1인칭") + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
+                (Time.timeScale < 1f ? " · 슬로모션" : ""),
                 smallRight);
 
             if (showHelp)
             {
-                Fill(new Rect(10f, 10f, 470f, 24f * HelpLines.Length + 12f), new Color(0f, 0f, 0f, 0.35f));
+                Fill(new Rect(10f, 10f, 530f, 24f * HelpLines.Length + 12f), new Color(0f, 0f, 0f, 0.35f));
                 for (int i = 0; i < HelpLines.Length; i++)
-                    GUI.Label(new Rect(20f, 16f + 24f * i, 460f, 24f), HelpLines[i], small);
+                    GUI.Label(new Rect(20f, 16f + 24f * i, 520f, 24f), HelpLines[i], small);
             }
         }
 

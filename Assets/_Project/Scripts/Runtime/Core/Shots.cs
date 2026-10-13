@@ -197,8 +197,6 @@ namespace FirstPersonTennis
     // 선입력(구질·방향·길이)을 상대 코트의 목표 지점으로 바꾸고 발사 속도를 구한다.
     public static class ShotPlanner
     {
-        public const float SmashMinHeight = 2.0f;
-
         public static ShotSolution Plan(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide)
         {
             float facing = Court.Facing(hitterSide);
@@ -225,7 +223,7 @@ namespace FirstPersonTennis
                     p = config.smash;
                     depth = Mathf.Lerp(p.maxDepth, p.minDepth, Mathf.Abs(aim));
                     speed = p.speed;
-                    if (contact.y >= SmashMinHeight)
+                    if (contact.y >= config.smashMinHeight)
                     {
                         minAngle = -35f;
                     }
@@ -243,10 +241,14 @@ namespace FirstPersonTennis
                     break;
             }
 
+            // 전체 템포: 속도는 배율만큼, 스핀은 배율의 제곱만큼 줄인다
+            float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
+            float spin = p.spin * pace * pace;
+
             var target = new Vector3(aim * config.maxAimX * facing, 0f, depth * facing);
             if (p.launchAngle > 0f)
-                return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, p.spin, config.surface);
-            return ShotSolver.SolveDrive(contact, target, speed * speedScale, p.spin, config.surface, minAngle);
+                return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, config.surface);
+            return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace, spin, config.surface, minAngle);
         }
     }
 }

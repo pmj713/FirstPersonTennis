@@ -109,7 +109,7 @@ namespace FirstPersonTennis.Tests
         [Test]
         public void ShortDragDownIsShortSlice()
         {
-            ShotIntent i = ShotGestureInput.Classify(new Vector2(0f, -0.04f), 0f);
+            ShotIntent i = ShotGestureInput.Classify(new Vector2(0f, -0.06f), 0f);
             Assert.AreEqual(ShotType.Slice, i.Type);
             Assert.Less(i.Depth, 0.1f);
         }
@@ -120,6 +120,23 @@ namespace FirstPersonTennis.Tests
             ShotIntent i = ShotGestureInput.Classify(new Vector2(0.01f, 0.25f), 0.25f);
             Assert.AreEqual(ShotType.Lob, i.Type);
             Assert.AreEqual(0f, i.Aim);
+        }
+
+        [TestCase(0f, 0.05f)]   // 위로 살짝
+        [TestCase(0.2f, 0.07f)] // 오른쪽으로 밀다가 위로 흐름
+        [TestCase(-0.25f, 0.1f)] // 왼쪽으로 크게 밀다가 위로 흐름 (22°)
+        public void SlightUpwardDriftStaysTopspin(float x, float y)
+        {
+            ShotIntent i = ShotGestureInput.Classify(new Vector2(x, y), y);
+            Assert.AreEqual(ShotType.Topspin, i.Type);
+        }
+
+        [Test]
+        public void DiagonalUpRightIsLobToTheRight()
+        {
+            ShotIntent i = ShotGestureInput.Classify(new Vector2(0.15f, 0.15f), 0.15f);
+            Assert.AreEqual(ShotType.Lob, i.Type);
+            Assert.Greater(i.Aim, 0f);
         }
 
         [Test]

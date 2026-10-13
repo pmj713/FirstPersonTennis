@@ -25,7 +25,7 @@ MonoBehaviour:
   staminaResumeThreshold: 0.5
   hitReach: 1.5
   swingReachExtra: 0.5
-  minHitHeight: 0.2
+  minHitHeight: 0.06
   maxHitHeight: 2.5
   contactForward: 0.45
   contactDepthTolerance: 0.6

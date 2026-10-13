@@ -12,8 +12,11 @@ namespace FirstPersonTennis
         [SerializeField] TennisBall ball;
         [SerializeField] AutoSwing swing;
 
-        // 모두 화면 높이 대비 비율 (해상도와 무관)
-        public const float DeadZone = 0.03f;
+        // 길이는 모두 화면 높이 대비 비율 (해상도와 무관)
+        public const float DeadZone = 0.03f;       // 좌우 방향
+        public const float SliceThreshold = 0.05f;
+        public const float LobThreshold = 0.08f;   // 로브는 실수로 나가면 치명적이라 더 길게 밀어야 한다
+        public const float MinVerticalAngle = 25f; // 이보다 눕힌 드래그는 좌우 방향으로만 본다 (도)
         public const float FullAim = 0.25f;
         public const float FullDepth = 0.3f;
         public const float SmashStroke = 0.08f;
@@ -85,19 +88,20 @@ namespace FirstPersonTennis
             if (Mathf.Abs(delta.x) >= DeadZone) intent.Aim = Mathf.Clamp(delta.x / FullAim, -1f, 1f);
 
             bool smash = maxRise >= SmashStroke && maxRise - delta.y >= SmashStroke;
+            bool steep = Mathf.Abs(delta.y) >= Mathf.Abs(delta.x) * Mathf.Tan(MinVerticalAngle * Mathf.Deg2Rad);
             if (smash)
             {
                 intent.Type = ShotType.Smash;
             }
-            else if (delta.y <= -DeadZone)
+            else if (steep && delta.y <= -SliceThreshold)
             {
                 intent.Type = ShotType.Slice;
-                intent.Depth = Mathf.Clamp01((-delta.y - DeadZone) / (FullDepth - DeadZone));
+                intent.Depth = Mathf.Clamp01((-delta.y - SliceThreshold) / (FullDepth - SliceThreshold));
             }
-            else if (delta.y >= DeadZone)
+            else if (steep && delta.y >= LobThreshold)
             {
                 intent.Type = ShotType.Lob;
-                intent.Depth = Mathf.Clamp01((delta.y - DeadZone) / (FullDepth - DeadZone));
+                intent.Depth = Mathf.Clamp01((delta.y - LobThreshold) / (FullDepth - LobThreshold));
             }
             return intent;
         }
