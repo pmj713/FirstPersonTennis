@@ -18,11 +18,12 @@ MonoBehaviour:
     friction: 0.55
   courtWidthScale: 2
   courtLengthScale: 1
-  ballDiameter: 0.067
+  ballDiameter: 0.3
   walkSpeed: 4
   runSpeed: 7
   acceleration: 30
   eyeHeight: 1.7
+  horizontalFov: 75
   sprintDistance: 5
   staminaRecoveryPerSecond: 0.3
   staminaResumeThreshold: 0.5
@@ -34,9 +35,19 @@ MonoBehaviour:
   contactDepthTolerance: 0.6
   idealLateral: 0.8
   idealHeight: 1
+  smashMinHeight: 2
+  smashReachHeight: 3.5
+  smashHitReach: 2
+  smashDepthTolerance: 1
+  smashAirMinHeight: 1.6
+  smashIdealHeight: 2.6
+  smashIdealLateral: 0.4
+  smashTempoBoost: 1.5
   swingWindup: 0.25
   followThrough: 0.35
   takeBackLead: 0.9
+  ballTimeScale: 0.8
+  shotSpeedScale: 1
   topspin:
     speed: 32
     shortSpeed: 32
@@ -44,6 +55,7 @@ MonoBehaviour:
     minDepth: 7
     maxDepth: 9.3
     launchAngle: 0
+    sideSpin: 0
   slice:
     speed: 24
     shortSpeed: 11
@@ -51,6 +63,7 @@ MonoBehaviour:
     minDepth: 2.2
     maxDepth: 9.5
     launchAngle: 0
+    sideSpin: 0
   lob:
     speed: 0
     shortSpeed: 0
@@ -58,6 +71,7 @@ MonoBehaviour:
     minDepth: 8.5
     maxDepth: 10.8
     launchAngle: 50
+    sideSpin: 0
   smash:
     speed: 34
     shortSpeed: 34
@@ -65,14 +79,109 @@ MonoBehaviour:
     minDepth: 7
     maxDepth: 9
     launchAngle: 0
+    sideSpin: 0
+  aimMargin: 0.8
+  volley:
+    speed: 24
+    shortSpeed: 13
+    spin: -60
+    minDepth: 2.5
+    maxDepth: 9
+    launchAngle: 0
+    sideSpin: 0
+  volleyMinHeight: 0.2
+  flatServe:
+    speed: 46
+    shortSpeed: 0
+    spin: 40
+    minDepth: 0
+    maxDepth: 0
+    launchAngle: 0
+    sideSpin: 0
+  sliceServe:
+    speed: 40
+    shortSpeed: 0
+    spin: 80
+    minDepth: 0
+    maxDepth: 0
+    launchAngle: 0
+    sideSpin: 120
+  kickServe:
+    speed: 34
+    shortSpeed: 0
+    spin: 260
+    minDepth: 0
+    maxDepth: 0
+    launchAngle: 0
+    sideSpin: -40
+  serveTossApex: 3.15
+  serveHandHeight: 1.5
+  serveIdealHeight: 2.9
+  serveTimingWindow: 0.6
+  serveHitMinHeight: 2
+  serveRetossHeight: 1
+  serveDepthInset: 0.9
+  serveAimInset: 0.5
+  secondServeSpeedScale: 0.85
+  secondServeErrorScale: 0.6
+  serveBaseError: 0.5
+  serveErrorPerBad: 2.5
+  lowBallHeight: 1.3
+  lowBallErrorScale: 0.2
   baseElevationError: 0.5
   elevationErrorPerBad: 2
   baseAzimuthError: 0.6
   azimuthErrorPerBad: 2.5
+  aimErrorPenalty: 0.1
   autoStrokeWhenNoInput: 0
   showLandingMarker: 1
+  showMinimap: 1
   showHitRangeRing: 1
   hitZoneAlert: 1
+  aiEasy:
+    reactionDelay: 0.4
+    speed: 5
+    acceleration: 18
+    errorScale: 0.9
+    smartAim: 0.15
+    sliceChance: 0.05
+    lobChance: 0.04
+    dropShotChance: 0
+    lobVsNetChance: 0.3
+    misjudgeChance: 0.2
+    serveTimingError: 0.2
+    firstServeFlatChance: 0.3
+  aiNormal:
+    reactionDelay: 0.25
+    speed: 6
+    acceleration: 24
+    errorScale: 0.6
+    smartAim: 0.5
+    sliceChance: 0.15
+    lobChance: 0.06
+    dropShotChance: 0.04
+    lobVsNetChance: 0.5
+    misjudgeChance: 0.08
+    serveTimingError: 0.13
+    firstServeFlatChance: 0.5
+  aiHard:
+    reactionDelay: 0.12
+    speed: 6.8
+    acceleration: 30
+    errorScale: 0.35
+    smartAim: 0.85
+    sliceChance: 0.2
+    lobChance: 0.06
+    dropShotChance: 0.07
+    lobVsNetChance: 0.6
+    misjudgeChance: 0.02
+    serveTimingError: 0.08
+    firstServeFlatChance: 0.6
   feedSpeedScale: 1
+  defaultRules:
+    format: 2
+    noAd: 0
+  defaultDifficulty: 1
   pointResetDelay: 1.6
+  faultDelay: 1.1
   feedDelay: 1
