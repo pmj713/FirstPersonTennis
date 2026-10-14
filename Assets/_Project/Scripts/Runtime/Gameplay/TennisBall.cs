@@ -14,15 +14,23 @@ namespace FirstPersonTennis
         public BallState State;
         public long StepIndex { get; private set; }
         public bool IsLive { get; private set; }
-        public int LastHitterSide { get; private set; } // -1, +1, 0 = 아직 없음
+        public int LastHitterSide { get; private set; } // -1, +1, 0 = 아무도 치지 않음 (토스 포함)
         public int BouncesSinceHit { get; private set; }
         public Vector3 FirstBouncePoint { get; private set; }
+
+        // 서브로 친 공: 리시버는 바운드 후에만 칠 수 있고, 첫 바운드는 이 박스에 들어가야 한다
+        public bool IsServe { get; private set; }
+        public bool ServeToDeuce { get; private set; }
+        // 서버가 토스한 공 (아직 치기 전)
+        public bool IsToss { get; private set; }
+        // 이번에 친 뒤 네트에 닿았는지 (서브면 렛)
+        public bool TouchedNet { get; private set; }
 
         // 지금 날아가는 공의 시간 배율 (공 템포 × 이번 샷 배율, 예: 스매시)
         public float TimeScale => Mathf.Max(0.05f, config.ballTimeScale * flightTempo);
 
         public event Action<long> BeforeStep;
-        public event Action<int> Launched;
+        public event Action<int> Launched; // 친 쪽 side, 토스는 0
         public event Action<Vector3> Bounced;
         public event Action NetHit;
         public event Action CrossedNet;
@@ -43,6 +51,7 @@ namespace FirstPersonTennis
             IsLive = false;
             LastHitterSide = 0;
             BouncesSinceHit = 0;
+            IsServe = IsToss = TouchedNet = false;
             flightTempo = 1f;
             State = new BallState(position, Vector3.zero, Vector3.zero);
             previousPosition = position;
@@ -53,10 +62,36 @@ namespace FirstPersonTennis
         // tempo: 이번 샷만의 시간 배율 (스매시처럼 빠르게 날아가는 공은 1보다 크다)
         public void Launch(int hitterSide, Vector3 velocity, Vector3 spin, float tempo = 1f)
         {
+            StartFlight(hitterSide, velocity, spin, tempo);
+            IsServe = false;
+            Launched?.Invoke(hitterSide);
+        }
+
+        public void LaunchServe(int serverSide, Vector3 velocity, Vector3 spin, bool toDeuce)
+        {
+            StartFlight(serverSide, velocity, spin, 1f);
+            IsServe = true;
+            ServeToDeuce = toDeuce;
+            Launched?.Invoke(serverSide);
+        }
+
+        // 서버가 손에서 공을 위로 던진다
+        public void Toss(Vector3 from, float upSpeed)
+        {
+            State = new BallState(from, new Vector3(0f, upSpeed, 0f), Vector3.zero);
+            StartFlight(0, State.Velocity, Vector3.zero, 1f);
+            IsServe = false;
+            IsToss = true;
+            Launched?.Invoke(0);
+        }
+
+        void StartFlight(int hitterSide, Vector3 velocity, Vector3 spin, float tempo)
+        {
             State.Velocity = velocity;
             State.Spin = spin;
             LastHitterSide = hitterSide;
             BouncesSinceHit = 0;
+            IsToss = TouchedNet = false;
             flightTempo = tempo;
             if (!IsLive)
             {
@@ -64,7 +99,6 @@ namespace FirstPersonTennis
                 accumulator = 0f;
                 previousPosition = State.Position;
             }
-            Launched?.Invoke(hitterSide);
         }
 
         void Update()
@@ -81,10 +115,12 @@ namespace FirstPersonTennis
                 steps++;
                 accumulator -= BallPhysics.Step;
                 BeforeStep?.Invoke(StepIndex);
+                if (!IsLive) break; // BeforeStep에서 공을 잡았다 (서브 타격 전 토스 회수 등)
                 previousPosition = State.Position;
                 StepEvents ev = BallPhysics.Integrate(ref State, config.surface);
                 StepIndex++;
 
+                if (ev.HitNet || ev.NetCord) TouchedNet = true;
                 if (ev.HitNet) NetHit?.Invoke();
                 if (ev.CrossedNet) CrossedNet?.Invoke();
                 if (ev.Bounced)

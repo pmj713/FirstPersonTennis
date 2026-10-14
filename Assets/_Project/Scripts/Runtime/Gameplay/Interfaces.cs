@@ -11,6 +11,14 @@ namespace FirstPersonTennis
         void OnNewIncomingBall();
     }
 
+    // 서브 차례일 때 마우스 입력을 받는 쪽 (누르면 토스, 놓으면 타격)
+    public interface IServeInput
+    {
+        bool WantsInput { get; }
+        void OnPress();
+        void OnRelease(ShotIntent intent);
+    }
+
     // 타구 품질 계산에 쓰는 이동 상태
     public interface IMover
     {

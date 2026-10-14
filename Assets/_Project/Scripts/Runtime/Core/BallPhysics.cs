@@ -21,6 +21,7 @@ namespace FirstPersonTennis
         public bool Bounced;
         public bool HitNet;
         public bool CrossedNet;
+        public bool NetCord; // 네트 상단을 스치고 넘어감 (서브면 렛)
         public Vector3 BouncePoint;
         public Vector3 NetPoint;
     }
@@ -43,6 +44,7 @@ namespace FirstPersonTennis
         const float InertiaFactor = 2f / 3f; // 속이 빈 구: I = 2/3 m r²
         const float RollThreshold = 0.4f;    // 이보다 느리게 닿으면 튀지 않고 구른다
         const float RollingDecay = 0.5f;
+        const float NetCordBand = 0.04f;     // 네트 상단 위 이 높이 안으로 지나가면 스친다
 
         static readonly float AeroK = 0.5f * AirDensity * Mathf.PI * RealRadius * RealRadius / Mass;
         static readonly Vector3 Gravity = new Vector3(0f, -9.81f, 0f);
@@ -82,13 +84,22 @@ namespace FirstPersonTennis
             {
                 Vector3 c = Vector3.Lerp(p0, s.Position, z0 / (z0 - z1));
                 events.NetPoint = c;
-                if (Mathf.Abs(c.x) <= Court.NetPostX && c.y - Radius < Court.NetHeightAt(c.x))
+                bool overNet = Mathf.Abs(c.x) <= Court.NetPostX;
+                float netHeight = Court.NetHeightAt(c.x);
+                if (overNet && c.y - Radius < netHeight)
                 {
                     events.HitNet = true;
                     s.Position = new Vector3(c.x, c.y, Mathf.Sign(z0) * (Radius + 0.01f));
                     s.Velocity = new Vector3(s.Velocity.x * 0.2f, Mathf.Min(s.Velocity.y, 0f) * 0.3f, -s.Velocity.z * 0.1f);
                     s.Spin *= 0.2f;
                     return events;
+                }
+                if (overNet && c.y - Radius < netHeight + NetCordBand)
+                {
+                    // 네트 코드: 테이프를 스치며 느려지고 살짝 튀어 오른 채 넘어간다
+                    events.NetCord = true;
+                    s.Velocity = new Vector3(s.Velocity.x * 0.7f, Mathf.Max(s.Velocity.y, 0f) * 0.3f + 0.8f, s.Velocity.z * 0.55f);
+                    s.Spin *= 0.4f;
                 }
                 events.CrossedNet = true;
             }

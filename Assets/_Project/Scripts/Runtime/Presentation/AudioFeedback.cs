@@ -2,12 +2,12 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    // 1단계용 효과음. 오디오 에셋 없이 코드로 만든 짧은 소리를 쓴다.
+    // 프로토타입용 효과음. 오디오 에셋 없이 코드로 만든 짧은 소리를 쓴다.
     [RequireComponent(typeof(AudioSource))]
     public class AudioFeedback : MonoBehaviour
     {
         [SerializeField] TennisBall ball;
-        [SerializeField] RallyReferee referee;
+        [SerializeField] MatchReferee referee;
 
         AudioSource source;
         AudioClip hit, bounce, alert, point;
@@ -37,7 +37,10 @@ namespace FirstPersonTennis
 
         public void PlayAlert() => source.PlayOneShot(alert, 0.35f);
 
-        void OnLaunched(int side) => source.PlayOneShot(hit, VolumeAt(ball.State.Position));
+        void OnLaunched(int side)
+        {
+            if (side != 0) source.PlayOneShot(hit, VolumeAt(ball.State.Position)); // 토스는 소리 없음
+        }
 
         void OnBounced(Vector3 at) => source.PlayOneShot(bounce, VolumeAt(at) * 0.8f);
 

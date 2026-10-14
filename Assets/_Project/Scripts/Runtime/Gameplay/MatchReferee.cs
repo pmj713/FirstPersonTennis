@@ -1,0 +1,374 @@
+using System;
+using System.Collections;
+using UnityEngine;
+
+namespace FirstPersonTennis
+{
+    public enum GameMode { Match, Practice }
+    public enum MatchPhase { Menu, Serve, Rally, PointOver, MatchOver }
+    public enum PointReason { Out, Net, DoubleBounce, Ace, DoubleFault }
+
+    // 경기 진행과 판정: 서브(폴트·렛·더블 폴트), 랠리(아웃·네트·투바운드), 점수, 서버 교대.
+    // 연습 모드는 1단계처럼 AI가 공을 주고 랠리만 한다.
+    public class MatchReferee : MonoBehaviour
+    {
+        [SerializeField] TennisConfig config;
+        [SerializeField] TennisBall ball;
+        [SerializeField] PlayerMovement player;
+        [SerializeField] ShotGestureInput playerInput;
+        [SerializeField] PlayerServe playerServe;
+        [SerializeField] AutoSwing playerSwing;
+        [SerializeField] AiOpponent ai;
+        [SerializeField] AutoSwing aiSwing;
+        [Tooltip("켜면 시작 메뉴부터, 끄면 기본 설정으로 바로 경기를 시작한다")]
+        [SerializeField] bool startInMenu = true;
+
+        // 공이 이 시간(공 물리 기준) 넘게 판정 없이 굴러다니면 멈춘 곳으로 판정한다
+        const float StuckSeconds = 10f;
+
+        public TennisConfig Config => config;
+        public TennisBall Ball => ball;
+        public AiOpponent Ai => ai;
+        public PlayerMovement Player => player;
+        public PlayerServe PlayerServe => playerServe;
+        public GameMode Mode { get; private set; }
+        public MatchPhase Phase { get; private set; } = MatchPhase.Menu;
+        public TennisScore Score { get; private set; }
+        public int ServeNumber { get; private set; } = 1;
+        public bool Paused { get; private set; }
+        public int PlayerSide => player.Side;
+        public int AiSide => -player.Side;
+
+        // 연습 모드 기록
+        public int PracticePlayerPoints { get; private set; }
+        public int PracticeAiPoints { get; private set; }
+        public int RallyReturns { get; private set; }
+        public int BestReturns { get; private set; }
+
+        public event Action<int, PointReason> PointEnded; // 이긴 쪽, 이유
+        public event Action<string> Called;               // 폴트, 렛 같은 심판 콜
+        public event Action<string> ScoreCalled;          // 포인트 뒤 점수 콜
+        public event Action MatchFinished;
+
+        readonly int[] pointsWon = new int[2];
+        readonly int[] aces = new int[2];
+        readonly int[] doubleFaults = new int[2];
+        readonly System.Random rng = new System.Random();
+        bool crossedNet;
+        long flightStartStep;
+        float resumeTimeScale = 1f;
+
+        public int PointsWon(int side) => pointsWon[I(side)];
+        public int Aces(int side) => aces[I(side)];
+        public int DoubleFaults(int side) => doubleFaults[I(side)];
+        public string NameOf(int side) => side == player.Side ? "나" : "상대";
+
+        void OnEnable()
+        {
+            ball.Launched += OnLaunched;
+            ball.Bounced += OnBounced;
+            ball.CrossedNet += OnCrossedNet;
+            playerServe.Whiffed += OnServeWhiffed;
+        }
+
+        void OnDisable()
+        {
+            ball.Launched -= OnLaunched;
+            ball.Bounced -= OnBounced;
+            ball.CrossedNet -= OnCrossedNet;
+            playerServe.Whiffed -= OnServeWhiffed;
+            if (Paused) Time.timeScale = resumeTimeScale;
+        }
+
+        void Start()
+        {
+            if (startInMenu) ShowMenu();
+            else StartMatch(config.defaultRules, config.defaultDifficulty);
+        }
+
+        void Update()
+        {
+            if (Phase != MatchPhase.Rally || !ball.IsLive || ball.LastHitterSide == 0) return;
+            JudgeRolling();
+
+            // 그래도 판정 없이 오래 남은 공 (안전장치)
+            if (Phase != MatchPhase.Rally) return;
+            if ((ball.StepIndex - flightStartStep) * BallPhysics.Step < StuckSeconds) return;
+            int hitter = ball.LastHitterSide;
+            if (ball.IsServe) Fault(false);
+            else if (!crossedNet || Court.SideOf(ball.State.Position.z) == hitter) EndPoint(-hitter, PointReason.Net);
+            else EndPoint(hitter, PointReason.DoubleBounce);
+        }
+
+        // ── 진행 ──────────────────────────────────────────────
+
+        public void ShowMenu()
+        {
+            StopAllCoroutines();
+            ResetPlayers();
+            Phase = MatchPhase.Menu;
+            Score = null;
+            float baseline = Court.HalfLength + 0.8f;
+            player.ResetTo(new Vector3(0f, 0f, baseline * PlayerSide));
+            ai.ResetTo(new Vector3(0f, 0f, baseline * AiSide));
+            ball.Hold(ai.FeedContact);
+            SetPaused(false);
+            UpdateInput();
+        }
+
+        // firstServer: 0 = 코인 토스, 아니면 그 side가 먼저 서브
+        public void StartMatch(MatchRules rules, AiDifficulty difficulty, int firstServer = 0)
+        {
+            StopAllCoroutines();
+            Mode = GameMode.Match;
+            ai.SetDifficulty(difficulty);
+            if (firstServer == 0) firstServer = rng.NextDouble() < 0.5 ? PlayerSide : AiSide;
+            Score = new TennisScore(rules, firstServer);
+            ServeNumber = 1;
+            Array.Clear(pointsWon, 0, 2);
+            Array.Clear(aces, 0, 2);
+            Array.Clear(doubleFaults, 0, 2);
+            SetPaused(false);
+            Phase = MatchPhase.PointOver;
+            UpdateInput();
+            Called?.Invoke(firstServer == PlayerSide ? "내 서브로 시작" : "상대 서브로 시작");
+            StartCoroutine(Serve(0.8f));
+        }
+
+        public void StartPractice(AiDifficulty difficulty)
+        {
+            StopAllCoroutines();
+            Mode = GameMode.Practice;
+            ai.SetDifficulty(difficulty);
+            Score = null;
+            PracticePlayerPoints = PracticeAiPoints = RallyReturns = BestReturns = 0;
+            SetPaused(false);
+            Phase = MatchPhase.PointOver;
+            UpdateInput();
+            StartCoroutine(PracticeFeed(0.5f));
+        }
+
+        public void SetPaused(bool paused)
+        {
+            if (paused == Paused) return;
+            if (paused)
+            {
+                resumeTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
+                Time.timeScale = 0f;
+            }
+            else
+            {
+                Time.timeScale = resumeTimeScale;
+            }
+            Paused = paused;
+            UpdateInput();
+        }
+
+        void UpdateInput()
+        {
+            bool enabled = !Paused && Phase != MatchPhase.Menu && Phase != MatchPhase.MatchOver;
+            player.InputEnabled = enabled;
+            playerInput.InputEnabled = enabled;
+        }
+
+        void ResetPlayers()
+        {
+            playerServe.EndTurn();
+            ai.CancelServe();
+            playerSwing.CancelSwing();
+            aiSwing.CancelSwing();
+        }
+
+        IEnumerator Serve(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            SetupServe();
+        }
+
+        // 서버는 베이스라인 뒤, 리시버는 대각선에 선다. 같은 포인트의 두 번째 서브도 여기서.
+        void SetupServe()
+        {
+            ResetPlayers();
+            int server = Score.Server;
+            bool deuce = Score.ServeFromDeuce;
+            float offset = Court.SinglesHalfWidth * 0.15f;
+            crossedNet = false;
+            Phase = MatchPhase.Serve;
+
+            if (server == PlayerSide)
+            {
+                player.ResetTo(Court.ServePosition(server, deuce, offset));
+                ai.ResetTo(Court.ReceivePosition(-server, deuce));
+                playerServe.BeginTurn(deuce, ServeNumber == 2);
+            }
+            else
+            {
+                ai.ResetTo(Court.ServePosition(server, deuce, offset));
+                player.ResetTo(Court.ReceivePosition(-server, deuce));
+                ai.BeginServe(deuce, ServeNumber == 2);
+            }
+        }
+
+        IEnumerator PracticeFeed(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            ResetPlayers();
+            float baseline = Court.HalfLength + 0.8f;
+            player.ResetTo(new Vector3(0f, 0f, baseline * PlayerSide));
+            ai.ResetTo(new Vector3(0f, 0f, baseline * AiSide));
+            ball.Hold(ai.FeedContact);
+            RallyReturns = 0;
+
+            yield return new WaitForSeconds(config.feedDelay);
+            crossedNet = false;
+            Phase = MatchPhase.Rally;
+            ai.Feed();
+        }
+
+        // ── 판정 ──────────────────────────────────────────────
+
+        void OnLaunched(int hitter)
+        {
+            if (hitter == 0) return; // 토스
+            crossedNet = false;
+            flightStartStep = ball.StepIndex;
+            if (Phase == MatchPhase.Serve && ball.IsServe) Phase = MatchPhase.Rally;
+            if (Phase == MatchPhase.Rally && hitter == PlayerSide)
+            {
+                RallyReturns++;
+                BestReturns = Mathf.Max(BestReturns, RallyReturns);
+            }
+        }
+
+        void OnCrossedNet() => crossedNet = true;
+
+        void OnServeWhiffed()
+        {
+            if (Phase == MatchPhase.Serve) Fault(true);
+        }
+
+        void OnBounced(Vector3 point) => Judge(point, ball.BouncesSinceHit);
+
+        // bounce: 친 뒤 몇 번째 바운드인지 (1 = 첫 바운드)
+        void Judge(Vector3 point, int bounce)
+        {
+            if (Phase != MatchPhase.Rally) return;
+            int hitter = ball.LastHitterSide;
+            if (hitter == 0) return;
+            int receiver = -hitter;
+
+            if (ball.IsServe)
+            {
+                if (bounce == 1)
+                {
+                    bool good = crossedNet && Court.IsInServiceBox(point, receiver, ball.ServeToDeuce);
+                    if (!good) Fault(false);
+                    else if (ball.TouchedNet) Let();
+                    // 들어갔으면 리시버가 받아야 한다
+                }
+                else if (bounce == 2)
+                {
+                    EndPoint(hitter, PointReason.Ace);
+                }
+                return;
+            }
+
+            if (bounce == 1)
+            {
+                if (!crossedNet || Court.SideOf(point.z) == hitter) EndPoint(receiver, PointReason.Net);
+                else if (!Court.IsInSingles(point, receiver)) EndPoint(receiver, PointReason.Out);
+            }
+            else if (bounce == 2)
+            {
+                EndPoint(hitter, PointReason.DoubleBounce);
+            }
+        }
+
+        // 아주 낮게 닿은 공은 튀지 않고 구른다 (바운드 이벤트 없음). 구르기 시작하면 남은 바운드를 한꺼번에 본다.
+        void JudgeRolling()
+        {
+            BallState s = ball.State;
+            if (s.Position.y > BallPhysics.Radius + 0.002f || Mathf.Abs(s.Velocity.y) > 0.01f) return;
+            int next = ball.BouncesSinceHit + 1;
+            Judge(s.Position, Mathf.Min(next, 2));
+            if (Phase == MatchPhase.Rally && next < 2) Judge(s.Position, 2);
+        }
+
+        void Fault(bool whiff)
+        {
+            int server = Score != null ? Score.Server : ball.LastHitterSide;
+            if (ServeNumber == 1)
+            {
+                ServeNumber = 2;
+                Phase = MatchPhase.PointOver;
+                Called?.Invoke(whiff ? "헛스윙 — 폴트" : "폴트");
+                StartCoroutine(Serve(config.faultDelay));
+                return;
+            }
+            doubleFaults[I(server)]++;
+            EndPoint(-server, PointReason.DoubleFault);
+        }
+
+        void Let()
+        {
+            Phase = MatchPhase.PointOver;
+            Called?.Invoke(ServeNumber == 1 ? "렛 — 첫 서브 다시" : "렛 — 두 번째 서브 다시");
+            StartCoroutine(Serve(config.faultDelay));
+        }
+
+        void EndPoint(int winner, PointReason reason)
+        {
+            Phase = MatchPhase.PointOver;
+            PointEnded?.Invoke(winner, reason);
+
+            if (Mode == GameMode.Practice)
+            {
+                if (winner == PlayerSide) PracticePlayerPoints++;
+                else PracticeAiPoints++;
+                StartCoroutine(PracticeFeed(config.pointResetDelay));
+                return;
+            }
+
+            pointsWon[I(winner)]++;
+            if (reason == PointReason.Ace) aces[I(winner)]++;
+            PointOutcome outcome = Score.AddPoint(winner);
+            ServeNumber = 1;
+            ScoreCalled?.Invoke(DescribeScore(outcome));
+
+            if (outcome.MatchWon)
+            {
+                Phase = MatchPhase.MatchOver;
+                UpdateInput();
+                MatchFinished?.Invoke();
+                return;
+            }
+            StartCoroutine(Serve(config.pointResetDelay + (outcome.GameWon ? 0.8f : 0f)));
+        }
+
+        // 포인트 뒤 심판 점수 콜. 서버 점수를 먼저 부른다.
+        public string DescribeScore(PointOutcome outcome)
+        {
+            string change = outcome.EndChange ? " · 코트 체인지" : "";
+            int winner = outcome.GameWinner;
+            if (outcome.MatchWon) return $"게임 · 세트 · 매치 — {NameOf(winner)}";
+            if (outcome.SetWon)
+            {
+                Vector2Int set = Score.CompletedSets[Score.CompletedSets.Count - 1];
+                return $"세트 — {NameOf(winner)} ({set.x}-{set.y}){change}";
+            }
+            if (outcome.TiebreakStarted) return $"게임 — {NameOf(winner)} · 타이브레이크{change}";
+            if (outcome.GameWon) return $"게임 — {NameOf(winner)}{change}";
+
+            int server = Score.Server;
+            if (Score.InTiebreak) return $"{Score.Points(server)}-{Score.Points(-server)}{change}";
+            if (Score.IsDeuce) return "듀스";
+            string a = Score.PointLabel(server), b = Score.PointLabel(-server);
+            if (a == "AD") return $"어드밴티지 {NameOf(server)}";
+            if (b == "AD") return $"어드밴티지 {NameOf(-server)}";
+            if (a == b) return a == "0" ? "0-0" : $"{a} 올";
+            return $"{a}-{b}";
+        }
+
+        static int I(int side) => side < 0 ? 0 : 1;
+    }
+}

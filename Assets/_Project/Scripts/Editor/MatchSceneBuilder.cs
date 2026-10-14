@@ -10,16 +10,16 @@ using Object = UnityEngine.Object;
 
 namespace FirstPersonTennis.EditorTools
 {
-    // 1단계 연습 씬(하드코트, 플레이어, 허수아비, 공, 보조 표시, HUD)을 만들고 컴포넌트를 연결한다.
-    // 메뉴: FirstPersonTennis > Build Phase 1 Scene. 다시 실행하면 씬을 새로 만든다 (설정 에셋은 유지).
-    public static class Phase1SceneBuilder
+    // 경기 씬(하드코트, 플레이어, AI 상대, 공, 심판, 보조 표시, HUD)을 만들고 컴포넌트를 연결한다.
+    // 메뉴: FirstPersonTennis > Build Match Scene. 다시 실행하면 씬을 새로 만든다 (설정 에셋은 유지).
+    public static class MatchSceneBuilder
     {
         const string Root = "Assets/_Project";
-        const string ScenePath = Root + "/Scenes/Phase1Court.unity";
+        public const string ScenePath = Root + "/Scenes/Match.unity";
         const string ConfigPath = Root + "/Settings/TennisConfig.asset";
         const string MaterialDir = Root + "/Materials";
 
-        [MenuItem("FirstPersonTennis/Build Phase 1 Scene")]
+        [MenuItem("FirstPersonTennis/Build Match Scene")]
         public static void BuildFromMenu()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
@@ -27,7 +27,7 @@ namespace FirstPersonTennis.EditorTools
             EditorSceneManager.OpenScene(ScenePath);
         }
 
-        // unity run <project> -- -executeMethod FirstPersonTennis.EditorTools.Phase1SceneBuilder.Build
+        // unity run <project> -- -executeMethod FirstPersonTennis.EditorTools.MatchSceneBuilder.Build
         public static void Build()
         {
             foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir })
@@ -58,32 +58,42 @@ namespace FirstPersonTennis.EditorTools
             var playerRacket = playerRoot.gameObject.AddComponent<RacketSwingVisual>();
             var gesture = playerRoot.gameObject.AddComponent<ShotGestureInput>();
             var playerSwing = playerRoot.gameObject.AddComponent<AutoSwing>();
+            var playerServe = playerRoot.gameObject.AddComponent<PlayerServe>(); // 같은 오브젝트에 있어야 제스처가 서브로 넘긴다
             Set(movement, "config", config);
             SetInt(movement, "side", -1);
             Set(playerRacket, "pivot", playerPivot);
             Set(gesture, "ball", ball);
             Set(gesture, "swing", playerSwing);
             WireSwing(playerSwing, config, ball, -1, playerRacket, gesture, 1f, 11);
+            Set(playerServe, "config", config);
+            Set(playerServe, "ball", ball);
+            Set(playerServe, "swing", playerSwing);
+            Set(playerServe, "movement", movement);
 
-            // 허수아비 (원거리, side +1)
-            Transform dummyRoot = CreateAthlete("Dummy", new Vector3(0f, 0f, Court.HalfLength + 0.8f), 180f, m.Dummy, m,
-                out _, out Transform dummyPivot);
-            var dummyRacket = dummyRoot.gameObject.AddComponent<RacketSwingVisual>();
-            var dummy = dummyRoot.gameObject.AddComponent<DummyOpponent>();
-            var dummySwing = dummyRoot.gameObject.AddComponent<AutoSwing>();
-            Set(dummyRacket, "pivot", dummyPivot);
-            Set(dummy, "config", config);
-            Set(dummy, "ball", ball);
-            Set(dummy, "swing", dummySwing);
-            WireSwing(dummySwing, config, ball, 1, dummyRacket, dummy, config.dummyErrorScale, 23);
+            // AI 상대 (원거리, side +1). 오차 배율은 경기 시작 때 난이도로 다시 정한다.
+            Transform aiRoot = CreateAthlete("Opponent", new Vector3(0f, 0f, Court.HalfLength + 0.8f), 180f, m.Opponent, m,
+                out _, out Transform aiPivot);
+            var aiRacket = aiRoot.gameObject.AddComponent<RacketSwingVisual>();
+            var ai = aiRoot.gameObject.AddComponent<AiOpponent>();
+            var aiSwing = aiRoot.gameObject.AddComponent<AutoSwing>();
+            Set(aiRacket, "pivot", aiPivot);
+            Set(ai, "config", config);
+            Set(ai, "ball", ball);
+            Set(ai, "swing", aiSwing);
+            Set(ai, "opponent", playerRoot);
+            WireSwing(aiSwing, config, ball, 1, aiRacket, ai, config.AiProfileFor(config.defaultDifficulty).errorScale, 23);
 
             // 진행
             var systems = new GameObject("Systems");
-            var referee = systems.AddComponent<RallyReferee>();
+            var referee = systems.AddComponent<MatchReferee>();
             Set(referee, "config", config);
             Set(referee, "ball", ball);
             Set(referee, "player", movement);
-            Set(referee, "dummy", dummy);
+            Set(referee, "playerInput", gesture);
+            Set(referee, "playerServe", playerServe);
+            Set(referee, "playerSwing", playerSwing);
+            Set(referee, "ai", ai);
+            Set(referee, "aiSwing", aiSwing);
 
             // 카메라 + 소리
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
@@ -125,13 +135,14 @@ namespace FirstPersonTennis.EditorTools
             Set(hud, "player", movement);
             Set(hud, "input", gesture);
             Set(hud, "playerSwing", playerSwing);
+            Set(hud, "playerServe", playerServe);
             Set(hud, "cameraRig", cameraRig);
 
             ValidateReferences(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings(ScenePath);
             AssetDatabase.SaveAssets();
-            Debug.Log($"[FirstPersonTennis] 1단계 씬 생성 완료: {ScenePath}");
+            Debug.Log($"[FirstPersonTennis] 경기 씬 생성 완료: {ScenePath}");
         }
 
         static void WireSwing(AutoSwing swing, TennisConfig config, TennisBall ball, int side,
@@ -242,7 +253,7 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Post = Lit("NetPost", new Color(0.2f, 0.22f, 0.2f));
             public readonly Material Ball = Lit("Ball", new Color(0.85f, 0.95f, 0.15f), 0.25f);
             public readonly Material Player = Lit("Player", new Color(0.2f, 0.45f, 0.9f));
-            public readonly Material Dummy = Lit("Dummy", new Color(0.85f, 0.25f, 0.2f));
+            public readonly Material Opponent = Lit("Opponent", new Color(0.85f, 0.25f, 0.2f));
             public readonly Material Racket = Lit("Racket", new Color(0.12f, 0.12f, 0.14f));
             public readonly Material RacketHead = Lit("RacketHead", new Color(0.85f, 0.85f, 0.8f));
             public readonly Material Net = Transparent("Net", new Color(0.05f, 0.05f, 0.05f, 0.55f), true);
@@ -310,7 +321,9 @@ namespace FirstPersonTennis.EditorTools
 
         static void AddToBuildSettings(string path)
         {
-            var scenes = EditorBuildSettings.scenes.Where(s => s.path != path).ToList();
+            // 지워진 씬(1단계 Phase1Court 등)은 목록에서 뺀다
+            var scenes = EditorBuildSettings.scenes
+                .Where(s => s.path != path && AssetDatabase.LoadAssetAtPath<SceneAsset>(s.path) != null).ToList();
             scenes.Insert(0, new EditorBuildSettingsScene(path, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }

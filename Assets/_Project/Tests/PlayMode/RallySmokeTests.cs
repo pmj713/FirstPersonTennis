@@ -6,20 +6,22 @@ using UnityEngine.TestTools;
 
 namespace FirstPersonTennis.Tests
 {
-    // 실제 1단계 씬에서: 허수아비가 공을 보내고, 플레이어가 이상적 위치에 서서 선입력하면 자동 스윙으로 돌려보내는지.
+    // 실제 경기 씬의 연습 모드에서: AI가 공을 보내고, 플레이어가 이상적 위치에 서서 선입력하면 자동 스윙으로 돌려보내는지.
     public class RallySmokeTests
     {
         [UnityTest]
         public IEnumerator PlayerAtIdealSpotReturnsBalls()
         {
-            SceneManager.LoadScene("Phase1Court");
+            SceneManager.LoadScene("Match");
             yield return null;
+            yield return null; // 씬 오브젝트의 Start(메뉴 표시)가 끝난 뒤에 조작한다
 
+            var referee = Object.FindAnyObjectByType<MatchReferee>();
+            Assert.IsNotNull(referee, "Match 씬에 MatchReferee가 없음");
             var input = Object.FindAnyObjectByType<ShotGestureInput>();
-            Assert.IsNotNull(input, "Phase1Court 씬에 ShotGestureInput이 없음");
             var swing = input.GetComponent<AutoSwing>();
             var mover = input.GetComponent<PlayerMovement>();
-            var referee = Object.FindAnyObjectByType<RallyReferee>();
+            referee.StartPractice(AiDifficulty.Normal);
 
             int hits = 0, whiffs = 0;
             swing.SwingResolved += hit =>
@@ -44,7 +46,8 @@ namespace FirstPersonTennis.Tests
                 Time.captureDeltaTime = 0f;
             }
 
-            Assert.GreaterOrEqual(hits, 4, $"맞힘 {hits}, 헛스윙 {whiffs}, 점수 {referee.PlayerPoints}:{referee.DummyPoints}");
+            Assert.GreaterOrEqual(hits, 4,
+                $"맞힘 {hits}, 헛스윙 {whiffs}, 점수 {referee.PracticePlayerPoints}:{referee.PracticeAiPoints}");
             Assert.AreEqual(0, whiffs, "이상적 위치에서 헛스윙이 나면 안 됨");
         }
     }

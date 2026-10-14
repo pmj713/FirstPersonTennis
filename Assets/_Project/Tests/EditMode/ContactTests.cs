@@ -61,12 +61,12 @@ namespace FirstPersonTennis.Tests
         [TestCase(2.1f, -13.5f)]
         public void PlannedSmashLandsInOpponentCourt(float height, float z)
         {
-            var config = ScriptableObject.CreateInstance<TennisConfig>();
+            var config = TestConfig.Create();
             var intent = new ShotIntent { Type = ShotType.Smash, Aim = 0.5f, Depth = 1f };
             ShotSolution s = ShotPlanner.Plan(config, intent, new Vector3(0.4f, height, z), -1);
             Assert.IsTrue(s.Success, $"landing {s.Landing}");
             Assert.IsTrue(Court.IsInSingles(s.Landing, 1), $"landing {s.Landing}");
-            Object.DestroyImmediate(config);
+            TestConfig.Destroy(config);
         }
 
         static bool Find(Trajectory t, int start, int end, out int index) =>

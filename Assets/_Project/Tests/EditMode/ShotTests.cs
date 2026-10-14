@@ -54,7 +54,7 @@ namespace FirstPersonTennis.Tests
         [TestCase(1)]
         public void PlannerSendsEveryShotTypeIntoOpponentCourt(int hitterSide)
         {
-            var config = ScriptableObject.CreateInstance<TennisConfig>();
+            var config = TestConfig.Create();
             var from = new Vector3(0.5f, 1f, 12.3f * hitterSide);
             foreach (ShotType type in new[] { ShotType.Topspin, ShotType.Slice, ShotType.Lob })
             {
@@ -66,7 +66,7 @@ namespace FirstPersonTennis.Tests
                     Assert.IsTrue(Court.IsInSingles(s.Landing, -hitterSide), $"{type} aim {aim}: landing {s.Landing}");
                 }
             }
-            Object.DestroyImmediate(config);
+            TestConfig.Destroy(config);
         }
 
         static void AssertLandsNear(Vector3 from, ShotSolution s, Vector2 target, float tolerance)

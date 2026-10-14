@@ -65,7 +65,6 @@ MonoBehaviour:
     minDepth: 7
     maxDepth: 9
     launchAngle: 0
-  maxAimX: 3.3
   baseElevationError: 0.5
   elevationErrorPerBad: 2
   baseAzimuthError: 0.6
@@ -74,12 +73,6 @@ MonoBehaviour:
   showLandingMarker: 1
   showHitRangeRing: 1
   hitZoneAlert: 1
-  dummySpeed: 6.5
-  dummyAcceleration: 25
-  dummyReactionDelay: 0.2
-  dummyErrorScale: 0.5
-  dummySliceChance: 0.15
-  dummyLobChance: 0.1
   feedSpeedScale: 1
   pointResetDelay: 1.6
   feedDelay: 1

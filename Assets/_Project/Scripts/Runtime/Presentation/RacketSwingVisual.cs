@@ -80,8 +80,10 @@ namespace FirstPersonTennis
         }
 
         // 포핸드 기준 포즈. yaw +면 라켓이 뒤로, lift +면 라켓 끝이 위로.
+        // 발리는 짧게 끊어 치는 펀치 동작
         Pose TakeBack() => type switch
         {
+            ShotType.Volley => new Pose(25f, 10f),
             ShotType.Slice => new Pose(80f, 40f),
             ShotType.Lob => new Pose(80f, -35f),
             ShotType.Smash => new Pose(20f, 85f),
@@ -90,6 +92,7 @@ namespace FirstPersonTennis
 
         Pose Impact() => type switch
         {
+            ShotType.Volley => new Pose(-15f, 5f),
             ShotType.Slice => new Pose(-10f, 0f),
             ShotType.Lob => new Pose(-10f, -10f),
             ShotType.Smash => new Pose(-20f, 60f),
@@ -98,6 +101,7 @@ namespace FirstPersonTennis
 
         Pose Follow() => type switch
         {
+            ShotType.Volley => new Pose(-45f, -5f),
             ShotType.Slice => new Pose(-120f, -25f),
             ShotType.Lob => new Pose(-130f, 75f),
             ShotType.Smash => new Pose(-110f, -35f),

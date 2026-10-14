@@ -92,6 +92,38 @@ namespace FirstPersonTennis
         [Tooltip("좌우로 최대한 밀었을 때 목표 지점이 단식 사이드라인에서 안쪽으로 떨어진 거리 (m)")]
         public float aimMargin = 0.8f;
 
+        [Header("발리")]
+        [Tooltip("speed = 기본·깊은 발리, shortSpeed = 드롭 발리, minDepth = 드롭 발리 깊이, maxDepth = 깊은 발리 깊이")]
+        public ShotProfile volley = new ShotProfile { speed = 24f, shortSpeed = 13f, spin = -60f, minDepth = 2.5f, maxDepth = 9f };
+        [Tooltip("이보다 낮은 공은 발리하지 않는다 (m)")]
+        public float volleyMinHeight = 0.2f;
+
+        [Header("서브")]
+        public ShotProfile flatServe = new ShotProfile { speed = 46f, spin = 40f };
+        public ShotProfile sliceServe = new ShotProfile { speed = 40f, spin = 80f, sideSpin = 120f };
+        public ShotProfile kickServe = new ShotProfile { speed = 34f, spin = 260f, sideSpin = -40f };
+        [Tooltip("손에서 토스한 공이 올라가는 최고 높이 (m)")]
+        public float serveTossApex = 3.15f;
+        public float serveHandHeight = 1.5f;
+        [Tooltip("가장 좋은 타점 높이 (m). 여기서 놓으면 타이밍 품질 최고")]
+        public float serveIdealHeight = 2.9f;
+        [Tooltip("이상적 높이에서 이만큼 벗어나면 타이밍 품질 0 (m)")]
+        public float serveTimingWindow = 0.6f;
+        [Tooltip("이보다 낮게 떨어진 뒤 놓으면 헛스윙 → 폴트 (m)")]
+        public float serveHitMinHeight = 2.0f;
+        [Tooltip("이 높이 아래로 떨어질 때까지 치지 않으면 다시 토스 (m)")]
+        public float serveRetossHeight = 1.0f;
+        [Tooltip("서비스라인에서 안쪽으로 노리는 거리 (m)")]
+        public float serveDepthInset = 0.9f;
+        [Tooltip("서비스 박스 옆 라인에서 안쪽으로 노리는 거리 (m)")]
+        public float serveAimInset = 0.5f;
+        public float secondServeSpeedScale = 0.85f;
+        public float secondServeErrorScale = 0.6f;
+        [Tooltip("서브 기본 오차 (도)")]
+        public float serveBaseError = 0.5f;
+        [Tooltip("타이밍 품질이 0일 때 더해지는 오차 (도)")]
+        public float serveErrorPerBad = 2.5f;
+
         [Header("낮은 공")]
         [Tooltip("이 높이 아래로 오는 공은 높이 때문에 생기는 오차를 줄인다 (m)")]
         public float lowBallHeight = 1.3f;
@@ -103,6 +135,9 @@ namespace FirstPersonTennis
         public float elevationErrorPerBad = 2f;
         public float baseAzimuthError = 0.6f;
         public float azimuthErrorPerBad = 2.5f;
+        [Tooltip("좌우 방향을 끝까지 줬을 때 타구 품질에 더해지는 벌점. 0이면 방향이 정확도에 영향 없음 " +
+                 "(참고: 뛰면서 침 0.35, 품질 '좋음'은 합계 0.2 미만)")]
+        [Range(0f, 0.5f)] public float aimErrorPenalty = 0.1f;
 
         [Header("보조")]
         [Tooltip("보조 많음: 선입력이 없으면 기본 스트로크를 자동으로 친다")]
@@ -113,19 +148,43 @@ namespace FirstPersonTennis
         public bool showHitRangeRing = true;
         public bool hitZoneAlert = true;
 
-        [Header("허수아비")]
-        public float dummySpeed = 6.5f;
-        public float dummyAcceleration = 25f;
-        public float dummyReactionDelay = 0.2f;
-        [Range(0f, 1f)] public float dummyErrorScale = 0.5f;
-        [Range(0f, 1f)] public float dummySliceChance = 0.15f;
-        [Range(0f, 1f)] public float dummyLobChance = 0.1f;
-        [Tooltip("허수아비가 포인트를 시작할 때 보내는 공의 속도 배율. 낮추면 깊이 보내려고 공이 높이 뜬다.")]
+        [Header("AI")]
+        public AiProfile aiEasy = new AiProfile
+        {
+            reactionDelay = 0.4f, speed = 5f, acceleration = 18f, errorScale = 0.9f, smartAim = 0.15f,
+            sliceChance = 0.05f, lobChance = 0.04f, dropShotChance = 0f, lobVsNetChance = 0.3f,
+            misjudgeChance = 0.2f, serveTimingError = 0.2f, firstServeFlatChance = 0.3f,
+        };
+        public AiProfile aiNormal = new AiProfile
+        {
+            reactionDelay = 0.25f, speed = 6f, acceleration = 24f, errorScale = 0.6f, smartAim = 0.5f,
+            sliceChance = 0.15f, lobChance = 0.06f, dropShotChance = 0.04f, lobVsNetChance = 0.5f,
+            misjudgeChance = 0.08f, serveTimingError = 0.13f, firstServeFlatChance = 0.5f,
+        };
+        public AiProfile aiHard = new AiProfile
+        {
+            reactionDelay = 0.12f, speed = 6.8f, acceleration = 30f, errorScale = 0.35f, smartAim = 0.85f,
+            sliceChance = 0.2f, lobChance = 0.06f, dropShotChance = 0.07f, lobVsNetChance = 0.6f,
+            misjudgeChance = 0.02f, serveTimingError = 0.08f, firstServeFlatChance = 0.6f,
+        };
+        [Tooltip("연습 모드에서 AI가 포인트를 시작할 때 보내는 공의 속도 배율. 낮추면 깊이 보내려고 공이 높이 뜬다.")]
         public float feedSpeedScale = 1f;
 
-        [Header("포인트")]
+        [Header("경기")]
+        public MatchRules defaultRules = new MatchRules { format = MatchFormat.OneSet };
+        public AiDifficulty defaultDifficulty = AiDifficulty.Normal;
         public float pointResetDelay = 1.6f;
+        [Tooltip("폴트·렛 뒤 다음 서브까지 (초)")]
+        public float faultDelay = 1.1f;
+        [Tooltip("연습 모드에서 공을 주기 전 대기 (초)")]
         public float feedDelay = 1f;
+
+        public AiProfile AiProfileFor(AiDifficulty difficulty) => difficulty switch
+        {
+            AiDifficulty.Easy => aiEasy,
+            AiDifficulty.Hard => aiHard,
+            _ => aiNormal,
+        };
 
         // Inspector에서 값이 바뀔 때 (에디터 전용). 코트와 공이 바로 다시 그려진다.
         public static event System.Action<TennisConfig> Changed;

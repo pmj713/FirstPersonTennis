@@ -50,5 +50,38 @@ namespace FirstPersonTennis
             float depth = point.z * side;
             return depth > 0f && depth <= HalfLength + LineTolerance;
         }
+
+        // 리시버 쪽 서비스 박스 (x 범위, 네트에서의 깊이 범위). 듀스 코트 = 리시버 기준 오른쪽.
+        public static void ServiceBox(int receiverSide, bool deuce, out float xMin, out float xMax)
+        {
+            float rightSign = Facing(receiverSide); // 리시버의 오른쪽이 월드 +x인지
+            float sign = deuce ? rightSign : -rightSign;
+            xMin = sign > 0f ? 0f : -SinglesHalfWidth;
+            xMax = sign > 0f ? SinglesHalfWidth : 0f;
+        }
+
+        public static bool IsInServiceBox(Vector3 point, int receiverSide, bool deuce)
+        {
+            ServiceBox(receiverSide, deuce, out float xMin, out float xMax);
+            if (point.x < xMin - LineTolerance || point.x > xMax + LineTolerance) return false;
+            float depth = point.z * receiverSide;
+            return depth > 0f && depth <= ServiceLine + LineTolerance;
+        }
+
+        // 서버가 서는 자리 (베이스라인 뒤, 듀스면 서버 기준 오른쪽)
+        public static Vector3 ServePosition(int serverSide, bool deuce, float offsetFromCenter)
+        {
+            float rightSign = Facing(serverSide);
+            float x = (deuce ? rightSign : -rightSign) * offsetFromCenter;
+            return new Vector3(x, 0f, (HalfLength + 0.3f) * serverSide);
+        }
+
+        // 리시버가 기다리는 자리 (대각선, 베이스라인 뒤)
+        public static Vector3 ReceivePosition(int receiverSide, bool deuce)
+        {
+            float rightSign = Facing(receiverSide);
+            float x = (deuce ? rightSign : -rightSign) * SinglesHalfWidth * 0.55f;
+            return new Vector3(x, 0f, (HalfLength + 0.8f) * receiverSide);
+        }
     }
 }

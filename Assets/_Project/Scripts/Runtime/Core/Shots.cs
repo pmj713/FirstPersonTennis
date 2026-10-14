@@ -3,7 +3,10 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    public enum ShotType { Topspin, Slice, Lob, Smash }
+    // Volley는 입력 구질이 아니라, 바운드 전에 칠 때 자동 스윙이 정하는 타격 종류다.
+    public enum ShotType { Topspin, Slice, Lob, Smash, Volley }
+
+    public enum ServeType { Flat, Slice, Kick }
 
     public enum StrokeSide { Forehand, Backhand }
 
@@ -26,6 +29,7 @@ namespace FirstPersonTennis
         [Tooltip("네트에서 가장 가까운 목표 거리 (m)")] public float minDepth;
         [Tooltip("네트에서 가장 먼 목표 거리 (m)")] public float maxDepth;
         [Tooltip("0보다 크면 발사각을 고정하고 속도를 계산한다 (로브)")] public float launchAngle;
+        [Tooltip("옆 스핀 (rad/s). + 치는 사람 기준 왼쪽으로 휜다 (서브)")] public float sideSpin;
     }
 
     public struct ShotSolution
@@ -49,11 +53,33 @@ namespace FirstPersonTennis
             Vector3.Cross(Vector3.up, horizontalDir) * spinRate;
 
         // 속도를 정해 두고 낮은 궤적의 발사각을 찾는다. 네트에 걸리면 속도를 줄여 궤적을 높인다.
+        // sideSpin(세로축 스핀, rad/s)이 있으면 공이 옆으로 휘므로, 떨어진 위치만큼 조준을 옮겨 다시 푼다.
         public static ShotSolution SolveDrive(Vector3 from, Vector3 target, float speed, float spinRate,
-            in SurfaceProfile surface, float minAngle = -12f)
+            in SurfaceProfile surface, float minAngle = -12f, float sideSpin = 0f)
+        {
+            if (sideSpin == 0f) return SolveDriveStraight(from, target, speed, spinRate, 0f, surface, minAngle);
+
+            Vector3 aim = target;
+            ShotSolution solution = default;
+            for (int i = 0; i < 5; i++)
+            {
+                solution = SolveDriveStraight(from, aim, speed, spinRate, sideSpin, surface, minAngle);
+                Vector3 miss = solution.Landing - target;
+                miss.y = 0f;
+                if (miss.magnitude < 0.1f) break;
+                aim -= miss;
+            }
+            Vector3 finalMiss = solution.Landing - target;
+            finalMiss.y = 0f;
+            solution.Success = solution.NetClearance >= NetMargin && finalMiss.magnitude <= DistanceTolerance;
+            return solution;
+        }
+
+        static ShotSolution SolveDriveStraight(Vector3 from, Vector3 target, float speed, float spinRate,
+            float sideSpin, in SurfaceProfile surface, float minAngle)
         {
             Horizontal(from, target, out Vector3 dir, out float distance);
-            Vector3 spin = SpinFor(dir, spinRate);
+            Vector3 spin = SpinFor(dir, spinRate) + Vector3.up * sideSpin;
             ShotSolution best = Evaluate(from, dir, distance, speed, 8f, spin, surface);
             float bestError = Score(best, from, dir, distance);
 
@@ -251,6 +277,65 @@ namespace FirstPersonTennis
             if (p.launchAngle > 0f)
                 return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, config.surface);
             return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace, spin, config.surface, minAngle);
+        }
+
+        // 발리: 클릭 = 기본 발리, ↓ = 드롭 발리 (길이 무관 짧게), ↑ = 깊은 발리 (로브 아님). 스매시는 Plan으로.
+        public static ShotSolution PlanVolley(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide)
+        {
+            if (intent.Type == ShotType.Smash) return Plan(config, intent, contact, hitterSide);
+
+            float facing = Court.Facing(hitterSide);
+            float aim = Mathf.Clamp(intent.Aim, -1f, 1f);
+            ShotProfile p = config.volley;
+            float depth, speed;
+            switch (intent.Type)
+            {
+                case ShotType.Slice:
+                    depth = p.minDepth;
+                    speed = p.shortSpeed;
+                    break;
+                case ShotType.Lob:
+                    depth = p.maxDepth;
+                    speed = p.speed;
+                    break;
+                default:
+                    depth = Mathf.Lerp(p.minDepth, p.maxDepth, 0.7f);
+                    speed = p.speed;
+                    break;
+            }
+
+            float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
+            depth *= Court.LengthScale;
+            float maxAimX = Court.SinglesHalfWidth - config.aimMargin;
+            var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
+            return ShotSolver.SolveDrive(contact, target, speed * pace, p.spin * pace * pace, config.surface, -25f);
+        }
+
+        // 서브: 대각선 서비스 박스의 서버 기준 왼쪽(-1)~가운데(0)~오른쪽(+1), 서비스라인 조금 안쪽을 노린다.
+        public static ShotSolution PlanServe(TennisConfig config, ServeType type, float aim, Vector3 contact,
+            int serverSide, bool deuce, bool secondServe)
+        {
+            int receiver = -serverSide;
+            Court.ServiceBox(receiver, deuce, out float xMin, out float xMax);
+            float facing = Court.Facing(serverSide);
+            float inset = config.serveAimInset;
+            float right = facing > 0f ? xMax - inset : xMin + inset; // 서버 기준 오른쪽 끝
+            float left = facing > 0f ? xMin + inset : xMax - inset;
+            float center = (xMin + xMax) * 0.5f;
+            aim = Mathf.Clamp(aim, -1f, 1f);
+            float x = aim >= 0f ? Mathf.Lerp(center, right, aim) : Mathf.Lerp(center, left, -aim);
+            var target = new Vector3(x, 0f, (Court.ServiceLine - config.serveDepthInset) * receiver);
+
+            ShotProfile p = type switch
+            {
+                ServeType.Slice => config.sliceServe,
+                ServeType.Kick => config.kickServe,
+                _ => config.flatServe,
+            };
+            float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
+            float speed = p.speed * pace * (secondServe ? config.secondServeSpeedScale : 1f);
+            float sideSpin = -p.sideSpin * pace * pace * facing; // + = 서버 기준 왼쪽으로 휨
+            return ShotSolver.SolveDrive(contact, target, speed, p.spin * pace * pace, config.surface, -20f, sideSpin);
         }
     }
 }

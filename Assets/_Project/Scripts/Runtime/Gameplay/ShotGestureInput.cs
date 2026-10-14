@@ -6,6 +6,7 @@ namespace FirstPersonTennis
 {
     // 좌클릭 → 드래그 → 놓기로 구질을 선입력한다. 놓는 순간 확정.
     // 가로축 = 방향, 세로축 = 구질. 입력은 상대가 친 순간부터 받는다.
+    // 내 서브 차례에는 같은 입력을 서브(누르면 토스, 놓으면 타격)로 넘긴다.
     [DefaultExecutionOrder(-15)]
     public class ShotGestureInput : MonoBehaviour, IShotIntentSource
     {
@@ -30,15 +31,24 @@ namespace FirstPersonTennis
         public ShotIntent DragPreview { get; private set; }
 
         public bool WindowOpen => ball.IsLive && ball.LastHitterSide == -swing.Side && !swing.IsSwinging;
+        public bool ServeMode => serve != null && serve.WantsInput;
+        public bool InputEnabled { get; set; } = true;
 
         public event Action IntentRejected; // 입력 가능 시점이 아닐 때 드래그를 놓음
 
+        IServeInput serve;
         float maxRise;
+
+        void Awake() => serve = GetComponent<IServeInput>();
 
         void Update()
         {
             Mouse mouse = Mouse.current;
-            if (mouse == null) return;
+            if (mouse == null || !InputEnabled)
+            {
+                IsDragging = false;
+                return;
+            }
 
             Vector2 position = mouse.position.ReadValue();
             float height = Mathf.Max(1, Screen.height);
@@ -48,6 +58,7 @@ namespace FirstPersonTennis
                 IsDragging = true;
                 DragStart = position;
                 maxRise = 0f;
+                if (ServeMode) serve.OnPress();
             }
 
             if (IsDragging)
@@ -60,7 +71,8 @@ namespace FirstPersonTennis
                 if (mouse.leftButton.wasReleasedThisFrame)
                 {
                     IsDragging = false;
-                    if (WindowOpen) SubmitIntent(DragPreview);
+                    if (ServeMode) serve.OnRelease(DragPreview);
+                    else if (WindowOpen) SubmitIntent(DragPreview);
                     else IntentRejected?.Invoke();
                 }
             }
