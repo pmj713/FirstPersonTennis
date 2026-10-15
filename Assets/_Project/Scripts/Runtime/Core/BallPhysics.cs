@@ -145,6 +145,11 @@ namespace FirstPersonTennis
                 s.Spin.x += j * dir.z / (InertiaFactor * RealRadius);
                 s.Spin.z -= j * dir.x / (InertiaFactor * RealRadius);
             }
+
+            // 무른 바닥(클레이)은 마찰과 별개로 수평 속도를 더 빼앗는다. 0은 값이 비어 있는 것으로 보고 그대로 둔다.
+            float keep = surface.speedRetention > 0f ? surface.speedRetention : 1f;
+            s.Velocity.x *= keep;
+            s.Velocity.z *= keep;
             s.Velocity.y = vOut;
         }
     }

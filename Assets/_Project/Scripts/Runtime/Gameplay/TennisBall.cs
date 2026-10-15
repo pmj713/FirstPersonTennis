@@ -30,6 +30,7 @@ namespace FirstPersonTennis
         public float TimeScale => Mathf.Max(0.05f, config.ballTimeScale * flightTempo);
 
         public event Action<long> BeforeStep;
+        public event Action Held; // 공을 손에 들거나 제자리에 둠 (새 포인트, 서브 준비)
         public event Action<int> Launched; // 친 쪽 side, 토스는 0
         public event Action<Vector3> Bounced;
         public event Action NetHit;
@@ -57,6 +58,7 @@ namespace FirstPersonTennis
             previousPosition = position;
             accumulator = 0f;
             transform.position = position;
+            Held?.Invoke();
         }
 
         // tempo: 이번 샷만의 시간 배율 (스매시처럼 빠르게 날아가는 공은 1보다 크다)
@@ -117,7 +119,7 @@ namespace FirstPersonTennis
                 BeforeStep?.Invoke(StepIndex);
                 if (!IsLive) break; // BeforeStep에서 공을 잡았다 (서브 타격 전 토스 회수 등)
                 previousPosition = State.Position;
-                StepEvents ev = BallPhysics.Integrate(ref State, config.surface);
+                StepEvents ev = BallPhysics.Integrate(ref State, Court.Surface);
                 StepIndex++;
 
                 if (ev.HitNet || ev.NetCord) TouchedNet = true;

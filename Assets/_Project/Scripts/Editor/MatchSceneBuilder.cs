@@ -83,6 +83,21 @@ namespace FirstPersonTennis.EditorTools
             Set(ai, "opponent", playerRoot);
             WireSwing(aiSwing, config, ball, 1, aiRacket, ai, config.AiProfileFor(config.defaultDifficulty).errorScale, 23);
 
+            // 관전용 AI (가까운 쪽, side -1). AI 대결 관전과 선수 밸런스 측정 때만 켠다.
+            Transform nearRoot = CreateAthlete("NearOpponent", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f,
+                m.NearOpponent, m, out _, out Transform nearPivot);
+            var nearRacket = nearRoot.gameObject.AddComponent<RacketSwingVisual>();
+            var nearAi = nearRoot.gameObject.AddComponent<AiOpponent>();
+            var nearSwing = nearRoot.gameObject.AddComponent<AutoSwing>();
+            Set(nearRacket, "pivot", nearPivot);
+            Set(nearAi, "config", config);
+            Set(nearAi, "ball", ball);
+            Set(nearAi, "swing", nearSwing);
+            Set(nearAi, "opponent", aiRoot);
+            SetInt(nearAi, "randomSeed", 13);
+            WireSwing(nearSwing, config, ball, -1, nearRacket, nearAi, config.AiProfileFor(config.defaultDifficulty).errorScale, 37);
+            nearRoot.gameObject.SetActive(false);
+
             // 진행
             var systems = new GameObject("Systems");
             var referee = systems.AddComponent<MatchReferee>();
@@ -94,6 +109,8 @@ namespace FirstPersonTennis.EditorTools
             Set(referee, "playerSwing", playerSwing);
             Set(referee, "ai", ai);
             Set(referee, "aiSwing", aiSwing);
+            Set(referee, "nearAi", nearAi);
+            Set(referee, "nearAiSwing", nearSwing);
 
             // 카메라 + 소리
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
@@ -128,6 +145,10 @@ namespace FirstPersonTennis.EditorTools
             Set(assists, "hitRangeRing", range);
             Set(assists, "ballHalo", halo);
             Set(assists, "audioFeedback", audio);
+
+            var marks = systems.AddComponent<BallMarks>();
+            Set(marks, "ball", ball);
+            Set(marks, "material", m.BallMark);
 
             var hud = systems.AddComponent<TennisHud>();
             Set(hud, "config", config);
@@ -254,6 +275,7 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Ball = Lit("Ball", new Color(0.85f, 0.95f, 0.15f), 0.25f);
             public readonly Material Player = Lit("Player", new Color(0.2f, 0.45f, 0.9f));
             public readonly Material Opponent = Lit("Opponent", new Color(0.85f, 0.25f, 0.2f));
+            public readonly Material NearOpponent = Lit("NearOpponent", new Color(0.95f, 0.75f, 0.2f));
             public readonly Material Racket = Lit("Racket", new Color(0.12f, 0.12f, 0.14f));
             public readonly Material RacketHead = Lit("RacketHead", new Color(0.85f, 0.85f, 0.8f));
             public readonly Material Net = Transparent("Net", new Color(0.05f, 0.05f, 0.05f, 0.55f), true);
@@ -261,6 +283,7 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Marker = Transparent("LandingMarker", new Color(1f, 0.85f, 0.1f, 0.85f));
             public readonly Material Range = Transparent("HitRange", new Color(1f, 1f, 1f, 0.35f));
             public readonly Material Halo = Transparent("BallHalo", new Color(0.3f, 0.9f, 1f, 0.35f));
+            public readonly Material BallMark = Transparent("BallMark", new Color(0.38f, 0.16f, 0.08f, 0.6f));
         }
 
         static Material Lit(string name, Color color, float smoothness = 0.1f)

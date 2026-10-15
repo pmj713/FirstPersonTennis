@@ -18,6 +18,7 @@ namespace FirstPersonTennis
         public float Tired;     // 스테미너 바닥
         public float Aim;       // 좌우 방향을 크게 줌
         public float BallSpeed; // 빠르게 온 공
+        public float Power;     // 힘 스탯만큼 강하게 침
         public bool IsServe;
         public float Timing;    // 서브 타이밍 (1 - 타이밍 품질)
         public bool Early;      // 서브: 공이 이상적 높이보다 높을 때 침
@@ -41,7 +42,8 @@ namespace FirstPersonTennis
         [SerializeField] int randomSeed = 1;
 
         public int Side => side;
-        public float ErrorScale { get => errorScale; set => errorScale = value; }
+        public float ErrorScale { get => errorScale; set => errorScale = value; } // AI 난이도
+        public PlayerStats Stats { get; set; } = PlayerStats.Neutral;                // 선수 스탯 (힘·기술)
         public bool IsSwinging { get; private set; }
         public bool HasContact { get; private set; }
         public Vector3 ContactPoint { get; private set; }
@@ -106,7 +108,7 @@ namespace FirstPersonTennis
                 return;
             }
 
-            trajectory.Simulate(ball.State, config.surface);
+            trajectory.Simulate(ball.State, Court.Surface);
             if (ball.BouncesSinceHit == 0 && trajectory.FirstBounceIndex >= 0)
             {
                 HasLanding = true;
@@ -184,12 +186,14 @@ namespace FirstPersonTennis
         {
             servePrep = false;
             Vector3 contact = ball.State.Position;
-            ShotSolution solution = ShotPlanner.PlanServe(config, type, aim, contact, side, toDeuce, secondServe);
+            ShotSolution solution = ShotPlanner.PlanServe(config, type, aim, contact, side, toDeuce, secondServe,
+                Stats.PowerScale, Stats.SpinScale);
             Vector3 velocity = solution.Velocity;
             Vector3 spin = solution.Spin;
 
-            float bad = 1f - Mathf.Clamp01(quality);
-            float scale = errorScale * (secondServe ? config.secondServeErrorScale : 1f);
+            float timing = 1f - Mathf.Clamp01(quality);
+            float bad = timing + Stats.PowerRisk;
+            float scale = errorScale * Stats.ErrorScale * (secondServe ? config.secondServeErrorScale : 1f);
             float sigma = (config.serveBaseError + bad * config.serveErrorPerBad) * scale;
             ApplyAimError(ref velocity, ref spin, Gaussian() * sigma, Gaussian() * sigma);
             velocity *= Mathf.Lerp(0.85f, 1f, quality); // 타이밍이 나쁘면 힘도 빠진다
@@ -200,7 +204,8 @@ namespace FirstPersonTennis
             Struck?.Invoke(new ShotQuality
             {
                 IsServe = true,
-                Timing = bad,
+                Timing = timing,
+                Power = Stats.PowerRisk,
                 Early = contact.y > config.serveIdealHeight,
                 Badness = bad,
             });
@@ -224,10 +229,55 @@ namespace FirstPersonTennis
 
         // 바운드 후 편하게 칠 수 있는 지점 (허리 높이로 내려오는 순간, 낮게 튀면 정점).
         // 높이 튄 깊은 공이라 그 자리가 물러설 수 있는 곳보다 멀면, 닿는 곳에서 칠 수 있는 가장 늦은 타점.
-        public bool TryGetIdealContact(out Vector3 point)
+        public bool TryGetIdealContact(out Vector3 point) => TryGetIdealContact(out point, out _);
+
+        // seconds: 공이 그 타점에 오기까지 남은 실제 시간
+        public bool TryGetIdealContact(out Vector3 point, out float seconds) =>
+            Resolve(FindIdealIndex(), out point, out seconds);
+
+        // 스매시하기 좋은 지점: 공이 머리 위 이상적 높이로 내려오는 순간 (바운드 전 내 코트 위, 아니면 바운드 후)
+        public bool TryGetSmashContact(out Vector3 point) => TryGetSmashContact(out point, out _);
+
+        public bool TryGetSmashContact(out Vector3 point, out float seconds) =>
+            Resolve(FindSmashIndex(), out point, out seconds);
+
+        // 네트 앞에서 바운드 전에 칠 지점: bodyZ 깊이에 섰을 때 타점 평면을 공이 지나는 순간
+        public bool TryGetVolleyContact(float bodyZ, out Vector3 point, out float seconds)
         {
-            point = default;
-            if (!Incoming || !TryGetWindow(out int start, out int end)) return false;
+            int index = -1;
+            if (Incoming && !ball.IsServe && ball.BouncesSinceHit == 0)
+            {
+                int beforeBounce = trajectory.FirstBounceIndex >= 0 ? trajectory.FirstBounceIndex : trajectory.Count - 1;
+                FindVolleyIndex(trajectory, beforeBounce, bodyZ, Facing, config.contactForward,
+                    config.volleyMinHeight, config.maxHitHeight, out index);
+            }
+            return Resolve(index, out point, out seconds);
+        }
+
+        bool Resolve(int index, out Vector3 point, out float seconds)
+        {
+            bool found = index >= 0;
+            point = found ? trajectory.Positions[index] : default;
+            seconds = found ? RealSeconds(index) : 0f;
+            return found;
+        }
+
+        int FindSmashIndex()
+        {
+            if (!Incoming || ball.IsServe) return -1;
+            float height = config.smashIdealHeight;
+            if (ball.BouncesSinceHit == 0)
+            {
+                int beforeBounce = trajectory.FirstBounceIndex >= 0 ? trajectory.FirstBounceIndex : trajectory.Count - 1;
+                int air = FindDescendingCrossing(1, beforeBounce, height);
+                if (air >= 0 && Court.SideOf(trajectory.Positions[air].z) == side) return air;
+            }
+            return TryGetWindow(out int start, out int end) ? FindDescendingCrossing(start + 1, end, height) : -1;
+        }
+
+        int FindIdealIndex()
+        {
+            if (!Incoming || !TryGetWindow(out int start, out int end)) return -1;
 
             int apex = start, ideal = -1;
             for (int k = start + 1; k <= end; k++)
@@ -254,26 +304,11 @@ namespace FirstPersonTennis
                     }
                 }
             }
-            point = trajectory.Positions[ideal];
-            return true;
+            return ideal;
         }
 
         // 이 타점을 치려고 설 자리가 코트 뒤 이동 한계 안인지
         bool CanStandFor(Vector3 contact) => SpotFor(contact).z * side <= Court.PlayableDepth - 0.05f;
-
-        // 스매시하기 좋은 지점: 공이 머리 위 이상적 높이로 내려오는 순간 (바운드 전 내 코트 위, 아니면 바운드 후)
-        public bool TryGetSmashContact(out Vector3 point)
-        {
-            point = default;
-            if (!Incoming || ball.IsServe) return false;
-            float height = config.smashIdealHeight;
-            if (ball.BouncesSinceHit == 0)
-            {
-                int beforeBounce = trajectory.FirstBounceIndex >= 0 ? trajectory.FirstBounceIndex : trajectory.Count - 1;
-                if (FindDescendingCrossing(1, beforeBounce, height, out point) && Court.SideOf(point.z) == side) return true;
-            }
-            return TryGetWindow(out int start, out int end) && FindDescendingCrossing(start + 1, end, height, out point);
-        }
 
         // 공이 이상적 타점에 오도록 서야 할 위치
         public Vector3 SpotFor(Vector3 contact) => SpotFor(contact, config.idealLateral);
@@ -317,8 +352,8 @@ namespace FirstPersonTennis
         void Strike(ShotIntent intent, Vector3 contact, float lateral, bool withError, bool volley)
         {
             ShotSolution solution = volley
-                ? ShotPlanner.PlanVolley(config, intent, contact, side)
-                : ShotPlanner.Plan(config, intent, contact, side);
+                ? ShotPlanner.PlanVolley(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale)
+                : ShotPlanner.Plan(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale);
             Vector3 velocity = solution.Velocity;
             Vector3 spin = solution.Spin;
 
@@ -327,8 +362,9 @@ namespace FirstPersonTennis
             {
                 quality = Assess(contact, lateral, intent);
                 float bad = quality.Badness;
-                float elevation = Gaussian() * (config.baseElevationError + bad * config.elevationErrorPerBad) * errorScale;
-                float azimuth = Gaussian() * (config.baseAzimuthError + bad * config.azimuthErrorPerBad) * errorScale;
+                float scale = errorScale * Stats.ErrorScale;
+                float elevation = Gaussian() * (config.baseElevationError + bad * config.elevationErrorPerBad) * scale;
+                float azimuth = Gaussian() * (config.baseAzimuthError + bad * config.azimuthErrorPerBad) * scale;
                 ApplyAimError(ref velocity, ref spin, azimuth, elevation);
             }
 
@@ -362,12 +398,13 @@ namespace FirstPersonTennis
                 TooClose = Mathf.Abs(lateral) < idealLateral,
                 Height = 0.6f * heightError,
                 TooLow = contact.y < idealHeight,
-                Running = mover != null && mover.Velocity.magnitude > config.walkSpeed * 1.1f ? 0.35f : 0f,
+                Running = mover != null && mover.Velocity.magnitude > config.walkSpeed * Stats.MoveScale * 1.1f ? 0.35f : 0f,
                 Tired = mover != null && mover.Exhausted ? 0.3f : 0f,
                 Aim = config.aimErrorPenalty * Mathf.Abs(intent.Aim),
                 BallSpeed = Mathf.Max(0f, ball.State.Velocity.magnitude - 25f) * 0.01f,
+                Power = Stats.PowerRisk,
             };
-            q.Badness = Mathf.Clamp(q.Reach + q.Height + q.Running + q.Tired + q.Aim + q.BallSpeed, 0f, 1.5f);
+            q.Badness = Mathf.Clamp(q.Reach + q.Height + q.Running + q.Tired + q.Aim + q.BallSpeed + q.Power, 0f, 1.5f);
             return q;
         }
 
@@ -543,19 +580,11 @@ namespace FirstPersonTennis
             return true;
         }
 
-        bool FindDescendingCrossing(int from, int to, float height, out Vector3 point)
+        int FindDescendingCrossing(int from, int to, float height)
         {
-            point = default;
             for (int k = Mathf.Max(1, from); k <= to && k < trajectory.Count; k++)
-            {
-                Vector3 previous = trajectory.Positions[k - 1], p = trajectory.Positions[k];
-                if (previous.y >= height && p.y < height)
-                {
-                    point = p;
-                    return true;
-                }
-            }
-            return false;
+                if (trajectory.Positions[k - 1].y >= height && trajectory.Positions[k].y < height) return k;
+            return -1;
         }
 
         float Gaussian()

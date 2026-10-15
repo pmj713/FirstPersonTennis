@@ -21,17 +21,45 @@ namespace FirstPersonTennis
 
         bool dirty;
         Mesh netMesh;
+        Renderer groundRenderer, surfaceRenderer;
+        MaterialPropertyBlock block;
+
+        static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         void OnEnable()
         {
             TennisConfig.Changed += OnConfigChanged;
+            Court.SurfaceChanged += ApplySurfaceColors;
             Rebuild();
         }
 
         void OnDisable()
         {
             TennisConfig.Changed -= OnConfigChanged;
+            Court.SurfaceChanged -= ApplySurfaceColors;
             if (!Application.isPlaying) Clear();
+        }
+
+        // 지금 코트 종류의 색을 바닥에 입힌다 (재질 에셋은 그대로 둔다)
+        void ApplySurfaceColors()
+        {
+            SurfaceProfile surface = Court.Surface;
+            block ??= new MaterialPropertyBlock();
+            Tint(surfaceRenderer, surface.courtColor);
+            Tint(groundRenderer, surface.surroundColor);
+        }
+
+        void Tint(Renderer target, Color color)
+        {
+            if (target == null) return;
+            if (color.a <= 0f)
+            {
+                target.SetPropertyBlock(null); // 색이 비어 있으면 재질 색 그대로
+                return;
+            }
+            block.Clear();
+            block.SetColor(BaseColor, color);
+            target.SetPropertyBlock(block);
         }
 
         void OnConfigChanged(TennisConfig changed)
@@ -58,11 +86,14 @@ namespace FirstPersonTennis
 
             Transform ground = Primitive(PrimitiveType.Plane, "Ground", transform, surround);
             ground.localScale = new Vector3((Court.PlayableHalfWidth + 21f) / 5f, 1f, (Court.HalfLength + 28f) / 5f);
+            groundRenderer = ground.GetComponent<Renderer>();
 
-            Flat("HardCourt", transform, courtSurface, new Vector3(0f, 0.005f, 0f),
+            Transform surface = Flat("CourtSurface", transform, courtSurface, new Vector3(0f, 0.005f, 0f),
                 new Vector2(Court.DoublesHalfWidth * 2f, Court.HalfLength * 2f));
+            surfaceRenderer = surface.GetComponent<Renderer>();
             BuildLines();
             BuildNet();
+            ApplySurfaceColors();
 
             if (!Application.isPlaying)
             {
@@ -148,13 +179,14 @@ namespace FirstPersonTennis
         }
 
         // 바닥에 눕힌 사각형 (size.x = 너비, size.y = z 방향 길이)
-        static void Flat(string name, Transform parent, Material material, Vector3 center, Vector2 size)
+        static Transform Flat(string name, Transform parent, Material material, Vector3 center, Vector2 size)
         {
             Transform t = Primitive(PrimitiveType.Quad, name, parent, material);
             t.localPosition = center;
             t.localRotation = Quaternion.Euler(90f, 0f, 0f);
             t.localScale = new Vector3(size.x, size.y, 1f);
             t.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+            return t;
         }
 
         static void Remove(Object target)

@@ -26,9 +26,10 @@ namespace FirstPersonTennis
             "T 슬로모션 · Esc 일시정지 · H 도움말",
         };
 
-        static readonly string[] ModeNames = { "경기", "랠리 연습" };
+        static readonly string[] ModeNames = { "경기", "랠리 연습", "AI 대결 관전" };
         static readonly string[] FormatNames = { "타이브레이크", "숏세트 (4게임)", "1세트", "3세트 (2선승)" };
         static readonly string[] DifficultyNames = { "쉬움", "보통", "어려움" };
+        static readonly string[] CourtNames = { "하드", "클레이", "잔디" };
 
         GUIStyle text, small, title, banner, subBanner, textCenter, smallCenter, smallRight, button, toolbar, big;
         string message, subMessage;
@@ -44,12 +45,16 @@ namespace FirstPersonTennis
         GameMode menuMode = GameMode.Match;
         MatchRules menuRules;
         AiDifficulty menuDifficulty;
+        int menuPlayerCharacter, menuAiCharacter;
+        string[] characterNames;
 
         void Start()
         {
             showMinimap = config.showMinimap;
             menuRules = config.defaultRules;
             menuDifficulty = config.defaultDifficulty;
+            menuPlayerCharacter = config.defaultPlayerCharacter;
+            menuAiCharacter = config.defaultAiCharacter;
             dot = CreateDotTexture();
         }
 
@@ -160,6 +165,7 @@ namespace FirstPersonTennis
                 if (q.Tired > 0f) items.Add((q.Tired, "스테미너 바닥"));
                 if (q.Aim >= Notable) items.Add((q.Aim, "방향을 크게 줌"));
                 if (q.BallSpeed >= Notable) items.Add((q.BallSpeed, "빠른 공"));
+                if (q.Power >= Notable) items.Add((q.Power, "강하게 침"));
             }
             items.Sort((a, b) => b.value.CompareTo(a.value));
             if (items.Count > 2) items.RemoveRange(2, items.Count - 2);
@@ -183,7 +189,7 @@ namespace FirstPersonTennis
                 return;
             }
 
-            if (referee.Mode == GameMode.Match) DrawScoreboard(w);
+            if (referee.Mode != GameMode.Practice) DrawScoreboard(w);
             else DrawPracticeScore(w);
 
             if (Time.unscaledTime < messageUntil)
@@ -191,10 +197,17 @@ namespace FirstPersonTennis
             if (Time.unscaledTime < subMessageUntil)
                 GUI.Label(new Rect(0f, h * 0.2f + 52f, w, 40f), subMessage, subBanner);
 
-            DrawStamina(new Rect(20f, h - 52f, 240f, 16f));
-            if (playerServe.MyTurn) DrawServe(w, h);
-            else DrawInputState(w, h);
-            if (Time.unscaledTime < qualityUntil) DrawShotQuality(w, h);
+            if (referee.Watching)
+            {
+                DrawWatchInfo(w, h);
+            }
+            else
+            {
+                DrawStamina(new Rect(20f, h - 52f, 240f, 16f));
+                if (playerServe.MyTurn) DrawServe(w, h);
+                else DrawInputState(w, h);
+                if (Time.unscaledTime < qualityUntil) DrawShotQuality(w, h);
+            }
 
             if (input.IsDragging)
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
@@ -221,22 +234,24 @@ namespace FirstPersonTennis
 
         // ── 메뉴와 오버레이 ───────────────────────────────────
 
+        // 왼쪽: 모드·경기 방식·코트·난이도, 오른쪽: 내 선수·상대 선수
         void DrawMenu(float w, float h)
         {
             Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.55f));
-            float pw = 560f, ph = 470f;
+            float pw = Mathf.Min(1000f, w - 40f), ph = 540f;
             var panel = new Rect((w - pw) / 2f, (h - ph) / 2f, pw, ph);
             Fill(panel, new Color(0.05f, 0.08f, 0.12f, 0.92f));
+            GUI.Label(new Rect(panel.x, panel.y + 18f, pw, 44f), "1인칭 테니스", big);
 
-            float x = panel.x + 30f, y = panel.y + 22f, cw = pw - 60f;
-            GUI.Label(new Rect(panel.x, y, pw, 44f), "1인칭 테니스", big);
-            y += 62f;
+            float cw = (pw - 90f) / 2f;
+            float x = panel.x + 30f, y = panel.y + 80f;
+            DrawCharacterPicker(new Rect(x + cw + 30f, y, cw, 300f));
 
             GUI.Label(new Rect(x, y, cw, 26f), "모드", small);
             menuMode = (GameMode)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuMode, ModeNames, toolbar);
             y += 76f;
 
-            if (menuMode == GameMode.Match)
+            if (menuMode != GameMode.Practice)
             {
                 GUI.Label(new Rect(x, y, cw, 26f), "경기 방식", small);
                 menuRules.format = (MatchFormat)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuRules.format, FormatNames, toolbar);
@@ -250,15 +265,53 @@ namespace FirstPersonTennis
                 y += 120f;
             }
 
+            GUI.Label(new Rect(x, y, cw, 26f), "코트", small);
+            var court = (CourtType)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)Court.Type, CourtNames, toolbar);
+            if (court != Court.Type) config.SelectCourt(court); // 고르는 즉시 뒤의 코트가 바뀐다
+            y += 76f;
+
             GUI.Label(new Rect(x, y, cw, 26f), "AI 난이도", small);
             menuDifficulty = (AiDifficulty)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuDifficulty, DifficultyNames, toolbar);
-            y += 86f;
 
-            if (GUI.Button(new Rect(x + cw / 2f - 120f, y, 240f, 50f), "시작", button))
+            if (GUI.Button(new Rect(panel.center.x - 120f, panel.yMax - 72f, 240f, 50f), "시작", button))
             {
+                referee.SetCharacters(menuPlayerCharacter, menuAiCharacter);
                 if (menuMode == GameMode.Match) referee.StartMatch(menuRules, menuDifficulty);
+                else if (menuMode == GameMode.Watch) referee.StartWatch(menuRules, menuDifficulty);
                 else referee.StartPractice(menuDifficulty);
             }
+        }
+
+        // 같은 선수를 양쪽이 동시에 골라도 된다
+        void DrawCharacterPicker(Rect area)
+        {
+            CharacterPreset[] roster = config.characters;
+            if (roster == null || roster.Length == 0) return;
+            if (characterNames == null || characterNames.Length != roster.Length) characterNames = new string[roster.Length];
+            for (int i = 0; i < roster.Length; i++) characterNames[i] = roster[i].name;
+
+            float y = area.y;
+            bool watch = menuMode == GameMode.Watch;
+            int player = PickCharacter(new Rect(area.x, y, area.width, 130f), watch ? "AI 1 선수 (가까운 쪽)" : "내 선수", menuPlayerCharacter, roster);
+            y += 140f;
+            int ai = PickCharacter(new Rect(area.x, y, area.width, 130f), watch ? "AI 2 선수 (먼 쪽)" : "상대 선수 (AI)", menuAiCharacter, roster);
+            if (player != menuPlayerCharacter || ai != menuAiCharacter)
+            {
+                menuPlayerCharacter = player;
+                menuAiCharacter = ai;
+                referee.SetCharacters(player, ai);
+            }
+        }
+
+        int PickCharacter(Rect r, string label, int selected, CharacterPreset[] roster)
+        {
+            selected = Mathf.Clamp(selected, 0, roster.Length - 1);
+            GUI.Label(new Rect(r.x, r.y, r.width, 26f), label, small);
+            selected = GUI.Toolbar(new Rect(r.x, r.y + 26f, r.width, 36f), selected, characterNames, toolbar);
+            CharacterPreset c = roster[selected];
+            GUI.Label(new Rect(r.x, r.y + 68f, r.width, 24f), $"힘 {c.power} · 기술 {c.technique} · 속도 {c.speed}", text);
+            GUI.Label(new Rect(r.x, r.y + 94f, r.width, 24f), c.description, small);
+            return selected;
         }
 
         void DrawPause(float w, float h)
@@ -279,7 +332,8 @@ namespace FirstPersonTennis
             Fill(panel, new Color(0.05f, 0.08f, 0.12f, 0.92f));
 
             float y = panel.y + 22f;
-            GUI.Label(new Rect(panel.x, y, pw, 44f), s.Winner == me ? "승리!" : "패배", big);
+            string result = referee.Watching ? $"{referee.NameOf(s.Winner)} ({referee.CharacterOf(s.Winner)?.name}) 승리" : s.Winner == me ? "승리!" : "패배";
+            GUI.Label(new Rect(panel.x, y, pw, 44f), result, big);
             y += 56f;
 
             var sets = new System.Text.StringBuilder();
@@ -297,7 +351,7 @@ namespace FirstPersonTennis
                 $"에이스   {referee.Aces(me)}  :  {referee.Aces(them)}",
                 $"더블 폴트   {referee.DoubleFaults(me)}  :  {referee.DoubleFaults(them)}",
             };
-            GUI.Label(new Rect(panel.x, y, pw, 22f), "나  :  상대", smallCenter);
+            GUI.Label(new Rect(panel.x, y, pw, 22f), $"{referee.NameOf(me)}  :  {referee.NameOf(them)}", smallCenter);
             y += 26f;
             foreach (string row in rows)
             {
@@ -307,7 +361,10 @@ namespace FirstPersonTennis
 
             y = panel.yMax - 74f;
             if (GUI.Button(new Rect(panel.center.x - 230f, y, 220f, 48f), "다시 하기", button))
-                referee.StartMatch(s.Rules, referee.Ai.Difficulty);
+            {
+                if (referee.Watching) referee.StartWatch(s.Rules, referee.Ai.Difficulty);
+                else referee.StartMatch(s.Rules, referee.Ai.Difficulty);
+            }
             if (GUI.Button(new Rect(panel.center.x + 10f, y, 220f, 48f), "메뉴로", button))
                 referee.ShowMenu();
         }
@@ -319,13 +376,13 @@ namespace FirstPersonTennis
         {
             TennisScore s = referee.Score;
             if (s == null) return;
-            const float RowH = 30f, NameW = 92f, SetW = 34f, GameW = 40f, PointW = 62f;
+            const float RowH = 30f, NameW = 150f, SetW = 34f, GameW = 40f, PointW = 62f;
             int setCount = s.CompletedSets.Count;
-            float width = 28f + NameW + SetW * setCount + GameW + PointW + 12f;
+            float width = Mathf.Max(380f, 28f + NameW + SetW * setCount + GameW + PointW + 12f);
             float x0 = w / 2f - width / 2f, y0 = 10f;
             Fill(new Rect(x0, y0, width, RowH * 2f + 34f), new Color(0f, 0f, 0f, 0.5f));
 
-            string format = FormatNames[(int)s.Rules.format] + (s.Rules.noAd ? " · 노애드" : "") +
+            string format = Court.Surface.name + " · " + FormatNames[(int)s.Rules.format] + (s.Rules.noAd ? " · 노애드" : "") +
                             (s.InTiebreak ? " · 타이브레이크" : "") +
                             (referee.ServeNumber == 2 ? " · 두 번째 서브" : "");
             GUI.Label(new Rect(x0, y0 + 2f, width, 22f), format, smallCenter);
@@ -338,7 +395,7 @@ namespace FirstPersonTennis
                 float x = x0 + 10f;
                 if (s.Server == side && !s.MatchOver) Dot(new Vector2(x + 6f, y + RowH / 2f), 10f, new Color(1f, 0.85f, 0.1f));
                 x += 18f;
-                GUI.Label(new Rect(x, y, NameW, RowH), referee.NameOf(side), text);
+                GUI.Label(new Rect(x, y, NameW, RowH), $"{referee.NameOf(side)} · {referee.CharacterOf(side)?.name}", text);
                 x += NameW;
                 foreach (Vector2Int set in s.CompletedSets)
                 {
@@ -358,7 +415,7 @@ namespace FirstPersonTennis
             GUI.Label(new Rect(w / 2f - 200f, 12f, 400f, 34f),
                 $"나 {referee.PracticePlayerPoints}  :  {referee.PracticeAiPoints} 상대", title);
             GUI.Label(new Rect(w / 2f - 200f, 46f, 400f, 26f),
-                $"랠리 연습 · 이번 랠리 {referee.RallyReturns}회 · 최고 {referee.BestReturns}회", smallCenter);
+                $"랠리 연습 · {Court.Surface.name} · 이번 랠리 {referee.RallyReturns}회 · 최고 {referee.BestReturns}회", smallCenter);
         }
 
         static int SetGames(Vector2Int set, int side) => side < 0 ? set.x : set.y;
@@ -437,7 +494,8 @@ namespace FirstPersonTennis
             if (playerSwing.HasLanding && Court.SideOf(playerSwing.LandingPoint.z) == player.Side)
                 Dot(Map(playerSwing.LandingPoint), 10f, new Color(1f, 0.85f, 0.1f));
             Dot(Map(referee.Ai.transform.position), 9f, new Color(0.95f, 0.3f, 0.25f));
-            Dot(Map(player.transform.position), 9f, new Color(0.35f, 0.6f, 1f));
+            Transform near = referee.Watching && referee.NearAi != null ? referee.NearAi.transform : player.transform;
+            Dot(Map(near.position), 9f, new Color(0.35f, 0.6f, 1f));
             Dot(Map(referee.Ball.transform.position), 6f, Color.white);
 
             GUI.Label(new Rect(area.x - 60f, area.yMax + 2f, area.width + 60f, 20f), "파랑 나 · 빨강 상대 · 노랑 낙하", smallRight);
@@ -484,6 +542,27 @@ namespace FirstPersonTennis
             GUI.Label(new Rect(r.x, r.y + 3f, r.width, 30f), (q.IsServe ? "서브 " : "타구 ") + rating, title);
             GUI.contentColor = previous;
             if (hasReasons) GUI.Label(new Rect(r.x, r.y + 32f, r.width, 24f), qualityReasons, smallCenter);
+        }
+
+        // 관전: 두 AI의 스테미너와 네트 대시 여부
+        void DrawWatchInfo(float w, float h)
+        {
+            var box = new Rect(w / 2f - 300f, h - 92f, 600f, 74f);
+            Fill(box, new Color(0f, 0f, 0f, 0.45f));
+            GUI.Label(new Rect(box.x, box.y + 4f, box.width, 26f), "AI 대결 관전 · Esc 일시정지 · V 시점 전환", smallCenter);
+            DrawAiStamina(new Rect(box.x + 20f, box.y + 48f, 250f, 14f), referee.PlayerSide, referee.NearAi);
+            DrawAiStamina(new Rect(box.xMax - 270f, box.y + 48f, 250f, 14f), referee.AiSide, referee.Ai);
+        }
+
+        void DrawAiStamina(Rect r, int side, AiOpponent ai)
+        {
+            if (ai == null) return;
+            string state = ai.Exhausted ? " · 지침" : ai.AtNet ? " · 네트" : "";
+            GUI.Label(new Rect(r.x, r.y - 22f, r.width, 20f), $"{referee.NameOf(side)} {ai.Character?.name}{state}", small);
+            Fill(r, new Color(0f, 0f, 0f, 0.5f));
+            Color color = ai.Exhausted ? new Color(0.9f, 0.25f, 0.2f) :
+                ai.IsSprinting ? new Color(1f, 0.7f, 0.2f) : new Color(0.35f, 0.85f, 0.4f);
+            Fill(new Rect(r.x + 2f, r.y + 2f, (r.width - 4f) * ai.Stamina01, r.height - 4f), color);
         }
 
         void DrawStamina(Rect r)

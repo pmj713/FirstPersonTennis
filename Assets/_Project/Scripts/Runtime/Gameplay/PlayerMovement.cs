@@ -16,6 +16,7 @@ namespace FirstPersonTennis
         public bool Exhausted { get; private set; }
         public bool IsSprinting { get; private set; }
         public bool InputEnabled { get; set; } = true;
+        public PlayerStats Stats { get; set; } = PlayerStats.Neutral; // 속도 스탯: 걷기·달리기 속도, 스테미너 회복
 
         // 서브 준비 중: 베이스라인 뒤에서 좌우로만 움직인다
         bool serveLock;
@@ -59,8 +60,9 @@ namespace FirstPersonTennis
             bool moving = input.sqrMagnitude > 0.01f;
             IsSprinting = sprintHeld && moving && !Exhausted;
 
-            float speed = IsSprinting ? config.runSpeed : config.walkSpeed;
-            Velocity = Vector3.MoveTowards(Velocity, wish * speed, config.acceleration * Time.deltaTime);
+            float speed = (IsSprinting ? config.runSpeed : config.walkSpeed) * Stats.MoveScale;
+            Vector3 target = wish * speed;
+            Velocity = Vector3.MoveTowards(Velocity, target, Court.MoveRate(Velocity, target, config.acceleration) * Time.deltaTime);
             UpdateStamina(Time.deltaTime);
 
             transform.position = Clamp(transform.position + Velocity * Time.deltaTime);
@@ -79,7 +81,7 @@ namespace FirstPersonTennis
         {
             if (IsSprinting)
             {
-                float capacitySeconds = config.sprintDistance / config.runSpeed;
+                float capacitySeconds = config.SprintDistance / (config.runSpeed * Stats.MoveScale);
                 Stamina01 -= dt / capacitySeconds;
                 if (Stamina01 <= 0f)
                 {
@@ -89,7 +91,7 @@ namespace FirstPersonTennis
             }
             else
             {
-                Stamina01 = Mathf.Min(1f, Stamina01 + config.staminaRecoveryPerSecond * dt);
+                Stamina01 = Mathf.Min(1f, Stamina01 + config.staminaRecoveryPerSecond * Stats.RecoveryScale * dt);
                 if (Exhausted && Stamina01 >= config.staminaResumeThreshold) Exhausted = false;
             }
         }

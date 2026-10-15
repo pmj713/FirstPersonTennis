@@ -29,5 +29,14 @@ namespace FirstPersonTennis
         public float serveTimingError;
         [Tooltip("첫 서브를 플랫으로 넣을 확률 (나머지는 슬라이스와 킥이 반반)")]
         [Range(0f, 1f)] public float firstServeFlatChance;
+
+        [Tooltip("코트 안쪽 짧은 공을 친 뒤 네트로 들어갈 확률")]
+        [Range(0f, 1f)] public float netRushChance;
+        [Tooltip("서브 후 바로 네트로 들어갈 확률 (서브 앤 발리)")]
+        [Range(0f, 1f)] public float serveVolleyChance;
+        [Tooltip("친 뒤 돌아갈 자리를 고르는 수준. 0 = 가운데로, 1 = 내가 보낸 공 쪽으로 치우쳐 상대 각도의 가운데를 막음")]
+        [Range(0f, 1f)] public float anticipation;
+        [Tooltip("친 뒤 돌아가는 속도 (걷기 속도 배율). 낮으면 늦게 따라간다")]
+        [Range(0.3f, 1.5f)] public float recoverySpeed;
     }
 }

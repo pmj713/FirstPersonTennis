@@ -11,6 +11,7 @@ namespace FirstPersonTennis.Tests
         public void UseItfDimensions()
         {
             Court.Configure(1f, 1f);
+            Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);
             BallPhysics.SetRadius(BallPhysics.RealRadius);
         }
     }

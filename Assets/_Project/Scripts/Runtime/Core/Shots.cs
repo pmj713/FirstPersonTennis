@@ -223,7 +223,9 @@ namespace FirstPersonTennis
     // 선입력(구질·방향·길이)을 상대 코트의 목표 지점으로 바꾸고 발사 속도를 구한다.
     public static class ShotPlanner
     {
-        public static ShotSolution Plan(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide)
+        // power: 힘 스탯의 속도 배율, spinScale: 기술 스탯의 스핀 배율, aimMarginScale: 기술 스탯의 사이드라인 여유 배율 (1 = 기본)
+        public static ShotSolution Plan(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide,
+            float power = 1f, float spinScale = 1f, float aimMarginScale = 1f)
         {
             float facing = Court.Facing(hitterSide);
             float aim = Mathf.Clamp(intent.Aim, -1f, 1f);
@@ -269,20 +271,21 @@ namespace FirstPersonTennis
 
             // 전체 템포: 속도는 배율만큼, 스핀은 배율의 제곱만큼 줄인다
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
-            float spin = p.spin * pace * pace;
+            float spin = p.spin * pace * pace * spinScale;
 
             depth *= Court.LengthScale; // 구질별 깊이는 ITF 길이 기준
-            float maxAimX = Court.SinglesHalfWidth - config.aimMargin;
+            float maxAimX = Court.SinglesHalfWidth - config.aimMargin * aimMarginScale;
             var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
             if (p.launchAngle > 0f)
-                return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, config.surface);
-            return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace, spin, config.surface, minAngle);
+                return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, Court.Surface);
+            return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace * power, spin, Court.Surface, minAngle);
         }
 
         // 발리: 클릭 = 기본 발리, ↓ = 드롭 발리 (길이 무관 짧게), ↑ = 깊은 발리 (로브 아님). 스매시는 Plan으로.
-        public static ShotSolution PlanVolley(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide)
+        public static ShotSolution PlanVolley(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide,
+            float power = 1f, float spinScale = 1f, float aimMarginScale = 1f)
         {
-            if (intent.Type == ShotType.Smash) return Plan(config, intent, contact, hitterSide);
+            if (intent.Type == ShotType.Smash) return Plan(config, intent, contact, hitterSide, power, spinScale, aimMarginScale);
 
             float facing = Court.Facing(hitterSide);
             float aim = Mathf.Clamp(intent.Aim, -1f, 1f);
@@ -306,14 +309,14 @@ namespace FirstPersonTennis
 
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
             depth *= Court.LengthScale;
-            float maxAimX = Court.SinglesHalfWidth - config.aimMargin;
+            float maxAimX = Court.SinglesHalfWidth - config.aimMargin * aimMarginScale;
             var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
-            return ShotSolver.SolveDrive(contact, target, speed * pace, p.spin * pace * pace, config.surface, -25f);
+            return ShotSolver.SolveDrive(contact, target, speed * pace * power, p.spin * pace * pace * spinScale, Court.Surface, -25f);
         }
 
         // 서브: 대각선 서비스 박스의 서버 기준 왼쪽(-1)~가운데(0)~오른쪽(+1), 서비스라인 조금 안쪽을 노린다.
         public static ShotSolution PlanServe(TennisConfig config, ServeType type, float aim, Vector3 contact,
-            int serverSide, bool deuce, bool secondServe)
+            int serverSide, bool deuce, bool secondServe, float power = 1f, float spinScale = 1f)
         {
             int receiver = -serverSide;
             Court.ServiceBox(receiver, deuce, out float xMin, out float xMax);
@@ -333,9 +336,9 @@ namespace FirstPersonTennis
                 _ => config.flatServe,
             };
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
-            float speed = p.speed * pace * (secondServe ? config.secondServeSpeedScale : 1f);
-            float sideSpin = -p.sideSpin * pace * pace * facing; // + = 서버 기준 왼쪽으로 휨
-            return ShotSolver.SolveDrive(contact, target, speed, p.spin * pace * pace, config.surface, -20f, sideSpin);
+            float speed = p.speed * pace * power * (secondServe ? config.secondServeSpeedScale : 1f);
+            float sideSpin = -p.sideSpin * pace * pace * spinScale * facing; // + = 서버 기준 왼쪽으로 휨
+            return ShotSolver.SolveDrive(contact, target, speed, p.spin * pace * pace * spinScale, Court.Surface, -20f, sideSpin);
         }
     }
 }

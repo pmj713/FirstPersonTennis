@@ -7,7 +7,11 @@ namespace FirstPersonTennis
     public class TennisConfig : ScriptableObject
     {
         [Header("코트")]
-        public SurfaceProfile surface = SurfaceProfile.Hard;
+        [Tooltip("시작 메뉴에서 처음 골라져 있는 코트")]
+        public CourtType defaultCourt = CourtType.Hard;
+        public SurfaceProfile hardCourt = SurfaceProfile.Hard;
+        public SurfaceProfile clayCourt = SurfaceProfile.Clay;
+        public SurfaceProfile grassCourt = SurfaceProfile.Grass;
         [Tooltip("좌우 너비 배율. 1 = ITF 규격 (단식 8.23m, 복식 10.97m). Play를 누르면 반영된다.")]
         [Range(0.5f, 3f)] public float courtWidthScale = 1f;
         [Tooltip("앞뒤 길이 배율. 1 = ITF 규격 (23.77m). 샷 목표 깊이도 같이 늘어난다. Play를 누르면 반영된다.")]
@@ -29,8 +33,12 @@ namespace FirstPersonTennis
         [Range(50f, 110f)] public float horizontalFov = 75f;
 
         [Header("스테미너")]
-        [Tooltip("가득 찬 스테미너로 달릴 수 있는 거리 (m). 단식 중앙→사이드라인 4.1m + 여유")]
+        [Tooltip("가득 찬 스테미너로 달릴 수 있는 거리 (m, ITF 규격 코트 기준). 단식 중앙→사이드라인 4.1m + 여유. " +
+                 "코트 너비 배율만큼 같이 늘어난다")]
         public float sprintDistance = 5f;
+
+        // 실제로 달릴 수 있는 거리: 중앙→사이드라인 기준이라 코트 너비를 따라간다
+        public float SprintDistance => sprintDistance * Court.WidthScale;
         [Tooltip("걷거나 멈춰 있을 때 초당 회복 비율")]
         public float staminaRecoveryPerSecond = 0.3f;
         [Tooltip("바닥난 뒤 다시 달릴 수 있게 되는 비율")]
@@ -148,24 +156,41 @@ namespace FirstPersonTennis
         public bool showHitRangeRing = true;
         public bool hitZoneAlert = true;
 
+        [Header("선수")]
+        [Tooltip("프리셋 선수 목록. 스탯은 0~100 (기준 50), 효과는 아래 statTuning (스탯 100일 때 바뀌는 비율)")]
+        public CharacterPreset[] characters = CharacterPreset.DefaultRoster();
+        public StatTuning statTuning = StatTuning.Default;
+        [Tooltip("시작 메뉴에서 처음 골라져 있는 내 선수 (characters 순서)")]
+        public int defaultPlayerCharacter;
+        [Tooltip("시작 메뉴에서 처음 골라져 있는 상대 선수 (characters 순서)")]
+        public int defaultAiCharacter;
+
+        public CharacterPreset Character(int index) =>
+            characters == null || characters.Length == 0 ? new CharacterPreset() : characters[Mathf.Clamp(index, 0, characters.Length - 1)];
+
+        public PlayerStats StatsOf(CharacterPreset character) => PlayerStats.From(character, statTuning);
+
         [Header("AI")]
         public AiProfile aiEasy = new AiProfile
         {
             reactionDelay = 0.4f, speed = 5f, acceleration = 18f, errorScale = 0.9f, smartAim = 0.15f,
             sliceChance = 0.05f, lobChance = 0.04f, dropShotChance = 0f, lobVsNetChance = 0.3f,
             misjudgeChance = 0.2f, serveTimingError = 0.2f, firstServeFlatChance = 0.3f,
+            netRushChance = 0f, serveVolleyChance = 0f, anticipation = 0f, recoverySpeed = 0.6f,
         };
         public AiProfile aiNormal = new AiProfile
         {
             reactionDelay = 0.25f, speed = 6f, acceleration = 24f, errorScale = 0.6f, smartAim = 0.5f,
             sliceChance = 0.15f, lobChance = 0.06f, dropShotChance = 0.04f, lobVsNetChance = 0.5f,
             misjudgeChance = 0.08f, serveTimingError = 0.13f, firstServeFlatChance = 0.5f,
+            netRushChance = 0.1f, serveVolleyChance = 0.05f, anticipation = 0.5f, recoverySpeed = 1f,
         };
         public AiProfile aiHard = new AiProfile
         {
             reactionDelay = 0.12f, speed = 6.8f, acceleration = 30f, errorScale = 0.35f, smartAim = 0.85f,
             sliceChance = 0.2f, lobChance = 0.06f, dropShotChance = 0.07f, lobVsNetChance = 0.6f,
             misjudgeChance = 0.02f, serveTimingError = 0.08f, firstServeFlatChance = 0.6f,
+            netRushChance = 0.3f, serveVolleyChance = 0.12f, anticipation = 1f, recoverySpeed = 1f,
         };
         [Tooltip("연습 모드에서 AI가 포인트를 시작할 때 보내는 공의 속도 배율. 낮추면 깊이 보내려고 공이 높이 뜬다.")]
         public float feedSpeedScale = 1f;
@@ -191,10 +216,22 @@ namespace FirstPersonTennis
 
         void OnValidate() => Changed?.Invoke(this);
 
-        // 코트 크기와 공 크기를 전역(Court, BallPhysics)에 적용한다. 코트를 만들 때와 공이 생길 때 호출된다.
+        public SurfaceProfile SurfaceFor(CourtType type) => type switch
+        {
+            CourtType.Clay => clayCourt,
+            CourtType.Grass => grassCourt,
+            _ => hardCourt,
+        };
+
+        // 경기할 코트를 바꾼다 (시작 메뉴, 코트 미리보기)
+        public void SelectCourt(CourtType type) => Court.SetSurface(type, SurfaceFor(type));
+
+        // 코트 크기·바닥과 공 크기를 전역(Court, BallPhysics)에 적용한다. 코트를 만들 때, 공이 생길 때,
+        // Inspector에서 값을 바꿀 때 호출된다. 바닥은 지금 고른 종류를 유지하고 값만 다시 읽는다.
         public void ApplyGlobals()
         {
             Court.Configure(courtWidthScale, courtLengthScale);
+            Court.SetSurface(Court.Type, SurfaceFor(Court.Type));
             BallPhysics.SetRadius(ballDiameter * 0.5f);
         }
     }

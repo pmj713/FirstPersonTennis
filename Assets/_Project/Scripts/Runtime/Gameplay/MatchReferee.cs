@@ -4,12 +4,12 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    public enum GameMode { Match, Practice }
+    public enum GameMode { Match, Practice, Watch }
     public enum MatchPhase { Menu, Serve, Rally, PointOver, MatchOver }
     public enum PointReason { Out, Net, DoubleBounce, Ace, DoubleFault }
 
     // 경기 진행과 판정: 서브(폴트·렛·더블 폴트), 랠리(아웃·네트·투바운드), 점수, 서버 교대.
-    // 연습 모드는 1단계처럼 AI가 공을 주고 랠리만 한다.
+    // 연습 모드는 1단계처럼 AI가 공을 주고 랠리만 한다. 관전 모드는 가까운 쪽도 AI가 맡아 AI끼리 경기한다.
     public class MatchReferee : MonoBehaviour
     {
         [SerializeField] TennisConfig config;
@@ -20,6 +20,9 @@ namespace FirstPersonTennis
         [SerializeField] AutoSwing playerSwing;
         [SerializeField] AiOpponent ai;
         [SerializeField] AutoSwing aiSwing;
+        [Tooltip("관전 모드에서 플레이어 대신 가까운 쪽을 맡는 AI (평소에는 꺼 둔다)")]
+        [SerializeField] AiOpponent nearAi;
+        [SerializeField] AutoSwing nearAiSwing;
         [Tooltip("켜면 시작 메뉴부터, 끄면 기본 설정으로 바로 경기를 시작한다")]
         [SerializeField] bool startInMenu = true;
 
@@ -31,6 +34,8 @@ namespace FirstPersonTennis
         public AiOpponent Ai => ai;
         public PlayerMovement Player => player;
         public PlayerServe PlayerServe => playerServe;
+        public AiOpponent NearAi => nearAi;
+        public bool Watching => Mode == GameMode.Watch;
         public GameMode Mode { get; private set; }
         public MatchPhase Phase { get; private set; } = MatchPhase.Menu;
         public TennisScore Score { get; private set; }
@@ -61,7 +66,28 @@ namespace FirstPersonTennis
         public int PointsWon(int side) => pointsWon[I(side)];
         public int Aces(int side) => aces[I(side)];
         public int DoubleFaults(int side) => doubleFaults[I(side)];
-        public string NameOf(int side) => side == player.Side ? "나" : "상대";
+        public string NameOf(int side) => Watching ? (side == PlayerSide ? "AI 1" : "AI 2") : side == PlayerSide ? "나" : "상대";
+
+        // 프리셋 선수: 같은 선수를 양쪽이 동시에 골라도 된다
+        public CharacterPreset PlayerCharacter { get; private set; }
+        public CharacterPreset AiCharacter => ai.Character;
+        public CharacterPreset CharacterOf(int side) =>
+            side != PlayerSide ? AiCharacter : Watching ? nearAi.Character : PlayerCharacter;
+
+        // 관전 모드에서는 가까운 쪽 AI가 '내 선수'를 쓴다
+        public void SetCharacters(int playerIndex, int aiIndex)
+        {
+            playerCharacterIndex = playerIndex;
+            aiCharacterIndex = aiIndex;
+            PlayerCharacter = config.Character(playerIndex);
+            PlayerStats stats = config.StatsOf(PlayerCharacter);
+            playerSwing.Stats = stats;
+            player.Stats = stats;
+            ai.SetCharacter(config.Character(aiIndex));
+            if (nearAi != null) nearAi.SetCharacter(PlayerCharacter);
+        }
+
+        int playerCharacterIndex, aiCharacterIndex;
 
         void OnEnable()
         {
@@ -82,6 +108,8 @@ namespace FirstPersonTennis
 
         void Start()
         {
+            config.SelectCourt(config.defaultCourt);
+            SetCharacters(config.defaultPlayerCharacter, config.defaultAiCharacter);
             if (startInMenu) ShowMenu();
             else StartMatch(config.defaultRules, config.defaultDifficulty);
         }
@@ -106,6 +134,8 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
+            SetWatching(false);
+            Mode = GameMode.Match;
             Phase = MatchPhase.Menu;
             Score = null;
             float baseline = Court.HalfLength + 0.8f;
@@ -117,11 +147,30 @@ namespace FirstPersonTennis
         }
 
         // firstServer: 0 = 코인 토스, 아니면 그 side가 먼저 서브
-        public void StartMatch(MatchRules rules, AiDifficulty difficulty, int firstServer = 0)
+        public void StartMatch(MatchRules rules, AiDifficulty difficulty, int firstServer = 0) =>
+            BeginMatch(GameMode.Match, rules, difficulty, firstServer);
+
+        // AI끼리 경기 (관전, 밸런스 측정). 양쪽 모두 같은 난이도.
+        public void StartWatch(MatchRules rules, AiDifficulty difficulty, int firstServer = 0)
+        {
+            if (nearAi == null)
+            {
+                Debug.LogWarning("[MatchReferee] 관전용 AI(nearAi)가 없어 일반 경기로 시작합니다. 씬을 다시 만들어 주세요.");
+                BeginMatch(GameMode.Match, rules, difficulty, firstServer);
+                return;
+            }
+            BeginMatch(GameMode.Watch, rules, difficulty, firstServer);
+        }
+
+        void BeginMatch(GameMode mode, MatchRules rules, AiDifficulty difficulty, int firstServer)
         {
             StopAllCoroutines();
-            Mode = GameMode.Match;
+            ResetPlayers();
+            Mode = mode;
+            SetWatching(mode == GameMode.Watch);
             ai.SetDifficulty(difficulty);
+            if (Watching) nearAi.SetDifficulty(difficulty);
+            SetCharacters(playerCharacterIndex, aiCharacterIndex); // 켜진 관전 AI에도 다시 적용
             if (firstServer == 0) firstServer = rng.NextDouble() < 0.5 ? PlayerSide : AiSide;
             Score = new TennisScore(rules, firstServer);
             ServeNumber = 1;
@@ -131,14 +180,17 @@ namespace FirstPersonTennis
             SetPaused(false);
             Phase = MatchPhase.PointOver;
             UpdateInput();
-            Called?.Invoke(firstServer == PlayerSide ? "내 서브로 시작" : "상대 서브로 시작");
+            Called?.Invoke(Watching ? $"{NameOf(firstServer)} 서브로 시작" :
+                firstServer == PlayerSide ? "내 서브로 시작" : "상대 서브로 시작");
             StartCoroutine(Serve(0.8f));
         }
 
         public void StartPractice(AiDifficulty difficulty)
         {
             StopAllCoroutines();
+            ResetPlayers();
             Mode = GameMode.Practice;
+            SetWatching(false);
             ai.SetDifficulty(difficulty);
             Score = null;
             PracticePlayerPoints = PracticeAiPoints = RallyReturns = BestReturns = 0;
@@ -166,9 +218,29 @@ namespace FirstPersonTennis
 
         void UpdateInput()
         {
-            bool enabled = !Paused && Phase != MatchPhase.Menu && Phase != MatchPhase.MatchOver;
+            bool enabled = !Paused && !Watching && Phase != MatchPhase.Menu && Phase != MatchPhase.MatchOver;
             player.InputEnabled = enabled;
             playerInput.InputEnabled = enabled;
+        }
+
+        // 관전: 가까운 쪽 AI를 켜고, 플레이어는 조작·스윙을 끈 채 가까운 베이스라인 뒤 관중 자리에 둔다 (카메라가 따라감)
+        void SetWatching(bool on)
+        {
+            if (nearAi == null) on = false;
+            if (nearAi != null && nearAi.gameObject.activeSelf != on) nearAi.gameObject.SetActive(on);
+            player.enabled = !on;
+            playerInput.enabled = !on;
+            playerSwing.enabled = !on;
+            ai.SetOpponent(on ? nearAi.transform : player.transform);
+            if (on) player.transform.position = new Vector3(0f, 0f, (Court.HalfLength + 6f) * PlayerSide);
+            UpdateInput();
+        }
+
+        // 가까운 쪽 선수 (평소 플레이어, 관전이면 AI)
+        void PlaceNear(Vector3 position)
+        {
+            if (Watching) nearAi.ResetTo(position);
+            else player.ResetTo(position);
         }
 
         void ResetPlayers()
@@ -177,6 +249,8 @@ namespace FirstPersonTennis
             ai.CancelServe();
             playerSwing.CancelSwing();
             aiSwing.CancelSwing();
+            if (nearAi != null && nearAi.isActiveAndEnabled) nearAi.CancelServe();
+            if (nearAiSwing != null) nearAiSwing.CancelSwing();
         }
 
         IEnumerator Serve(float delay)
@@ -197,14 +271,15 @@ namespace FirstPersonTennis
 
             if (server == PlayerSide)
             {
-                player.ResetTo(Court.ServePosition(server, deuce, offset));
+                PlaceNear(Court.ServePosition(server, deuce, offset));
                 ai.ResetTo(Court.ReceivePosition(-server, deuce));
-                playerServe.BeginTurn(deuce, ServeNumber == 2);
+                if (Watching) nearAi.BeginServe(deuce, ServeNumber == 2);
+                else playerServe.BeginTurn(deuce, ServeNumber == 2);
             }
             else
             {
                 ai.ResetTo(Court.ServePosition(server, deuce, offset));
-                player.ResetTo(Court.ReceivePosition(-server, deuce));
+                PlaceNear(Court.ReceivePosition(-server, deuce));
                 ai.BeginServe(deuce, ServeNumber == 2);
             }
         }

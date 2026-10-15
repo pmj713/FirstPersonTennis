@@ -12,10 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03355a96bd7b9374a82e5b9dfbdeb6ab, type: 3}
   m_Name: TennisConfig
   m_EditorClassIdentifier: FirstPersonTennis::FirstPersonTennis.TennisConfig
-  surface:
-    name: Hard
-    restitution: 0.73
-    friction: 0.55
   courtWidthScale: 2
   courtLengthScale: 1
   ballDiameter: 0.3

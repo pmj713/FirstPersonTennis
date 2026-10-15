@@ -7,10 +7,22 @@ using UnityEngine.TestTools;
 namespace FirstPersonTennis.Tests
 {
     // 실제 경기 씬의 연습 모드에서: AI가 공을 보내고, 플레이어가 이상적 위치에 서서 선입력하면 자동 스윙으로 돌려보내는지.
+    // 코트마다 공이 튀는 높이가 달라도 타점을 찾아야 한다.
     public class RallySmokeTests
     {
         [UnityTest]
-        public IEnumerator PlayerAtIdealSpotReturnsBalls()
+        public IEnumerator PlayerAtIdealSpotReturnsBalls() => Rally(CourtType.Hard);
+
+        [UnityTest]
+        public IEnumerator PlayerAtIdealSpotReturnsBallsOnClay() => Rally(CourtType.Clay);
+
+        [UnityTest]
+        public IEnumerator PlayerAtIdealSpotReturnsBallsOnGrass() => Rally(CourtType.Grass);
+
+        [TearDown]
+        public void RestoreCourt() => Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);
+
+        static IEnumerator Rally(CourtType court)
         {
             SceneManager.LoadScene("Match");
             yield return null;
@@ -21,6 +33,7 @@ namespace FirstPersonTennis.Tests
             var input = Object.FindAnyObjectByType<ShotGestureInput>();
             var swing = input.GetComponent<AutoSwing>();
             var mover = input.GetComponent<PlayerMovement>();
+            referee.Config.SelectCourt(court);
             referee.StartPractice(AiDifficulty.Normal);
 
             int hits = 0, whiffs = 0;
@@ -46,9 +59,10 @@ namespace FirstPersonTennis.Tests
                 Time.captureDeltaTime = 0f;
             }
 
+            Assert.AreEqual(court, Court.Type);
             Assert.GreaterOrEqual(hits, 4,
-                $"맞힘 {hits}, 헛스윙 {whiffs}, 점수 {referee.PracticePlayerPoints}:{referee.PracticeAiPoints}");
-            Assert.AreEqual(0, whiffs, "이상적 위치에서 헛스윙이 나면 안 됨");
+                $"{court}: 맞힘 {hits}, 헛스윙 {whiffs}, 점수 {referee.PracticePlayerPoints}:{referee.PracticeAiPoints}");
+            Assert.AreEqual(0, whiffs, $"{court}: 이상적 위치에서 헛스윙이 나면 안 됨");
         }
     }
 }

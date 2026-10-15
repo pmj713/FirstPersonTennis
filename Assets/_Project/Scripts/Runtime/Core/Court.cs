@@ -36,6 +36,30 @@ namespace FirstPersonTennis
             LengthScale = Mathf.Max(0.1f, lengthScale);
         }
 
+        // 지금 경기하는 코트 바닥. 공 물리·궤적 예측·샷 계획·선수 이동이 모두 이 값을 쓴다.
+        public static CourtType Type { get; private set; } = CourtType.Hard;
+        public static SurfaceProfile Surface { get; private set; } = SurfaceProfile.Hard;
+        public static event System.Action SurfaceChanged;
+
+        public static void SetSurface(CourtType type, SurfaceProfile surface)
+        {
+            Type = type;
+            Surface = surface;
+            SurfaceChanged?.Invoke();
+        }
+
+        // 바닥에 따른 가감속 (m/s²): 지금 속도를 줄이는 쪽이면 제동 배율, 아니면 출발 배율
+        public static float MoveRate(Vector3 velocity, Vector3 target, float acceleration)
+        {
+            bool slowing = Vector3.Dot(target - velocity, velocity) < 0f;
+            float grip = slowing ? Surface.braking : Surface.traction;
+            return acceleration * (grip > 0f ? grip : 1f);
+        }
+
+        // 바닥에서 낼 수 있는 제동 (m/s²)
+        public static float BrakeRate(float acceleration) =>
+            acceleration * (Surface.braking > 0f ? Surface.braking : 1f);
+
         public static float NetHeightAt(float x) =>
             Mathf.Lerp(NetCenterHeight, NetPostHeight, Mathf.Clamp01(Mathf.Abs(x) / NetPostX));
 

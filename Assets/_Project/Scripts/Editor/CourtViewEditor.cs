@@ -18,6 +18,14 @@ namespace FirstPersonTennis.EditorTools
                 if (configObject == null || configObject.targetObject != config) configObject = new SerializedObject(config);
                 configObject.Update();
 
+                EditorGUILayout.LabelField("코트 종류", EditorStyles.boldLabel);
+                var court = (CourtType)EditorGUILayout.EnumPopup(new GUIContent("미리보기",
+                    "지금 보이는 코트를 바꾼다. 플레이 중이면 경기 코트도 바뀐다. 각 코트의 값은 아래 hardCourt·clayCourt·grassCourt에서 조절"),
+                    Court.Type);
+                if (court != Court.Type) config.SelectCourt(court);
+                EditorGUILayout.PropertyField(configObject.FindProperty("defaultCourt"), new GUIContent("메뉴 기본 코트"));
+                EditorGUILayout.Space();
+
                 EditorGUILayout.LabelField("코트·공 크기", EditorStyles.boldLabel);
                 EditorGUILayout.PropertyField(configObject.FindProperty("courtWidthScale"), new GUIContent("코트 너비 배율", "1 = ITF 규격 (단식 8.23m)"));
                 EditorGUILayout.PropertyField(configObject.FindProperty("courtLengthScale"), new GUIContent("코트 길이 배율", "1 = ITF 규격 (23.77m)"));
