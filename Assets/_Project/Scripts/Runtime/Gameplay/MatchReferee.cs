@@ -45,6 +45,11 @@ namespace FirstPersonTennis
         public int PlayerSide => player.Side;
         public int AiSide => -player.Side;
         bool Judging => Mode != GameMode.Tutorial;
+
+        // 보조(낙하 지점 마커·타격 범위 알림·자동 기본 스트로크)는 쉬움 난이도로 경기·랠리 연습을 할 때만 켠다.
+        // 튜토리얼은 표시만 켜고 자동 스트로크는 끈다 (선입력을 배우는 중이라)
+        public bool AssistDisplays => Mode == GameMode.Tutorial || EasyPlay;
+        bool EasyPlay => (Mode == GameMode.Match || Mode == GameMode.Practice) && ai.Difficulty == AiDifficulty.Easy;
         static float ServeOffset => Court.SinglesHalfWidth * 0.15f;
 
         // 연습 모드 기록
@@ -168,8 +173,8 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
-            SetMode(mode);
             ai.SetDifficulty(difficulty);
+            SetMode(mode);
             if (Watching) nearAi.SetDifficulty(difficulty);
             SetCharacters(playerCharacterIndex, aiCharacterIndex); // 켜진 관전 AI에도 다시 적용
             if (firstServer == 0) firstServer = rng.NextDouble() < 0.5 ? PlayerSide : AiSide;
@@ -190,8 +195,8 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
-            SetMode(GameMode.Practice);
             ai.SetDifficulty(difficulty);
+            SetMode(GameMode.Practice);
             Score = null;
             PracticePlayerPoints = PracticeAiPoints = RallyReturns = BestReturns = 0;
             SetPaused(false);
@@ -216,12 +221,13 @@ namespace FirstPersonTennis
             UpdateInput();
         }
 
-        // 모드에 맞춰 관전 AI와 튜토리얼 AI(공만 주는 상대)를 켜고 끈다
+        // 모드에 맞춰 관전 AI, 튜토리얼 AI(공만 주는 상대), 자동 기본 스트로크를 켜고 끈다. 난이도는 먼저 정해 둔다
         void SetMode(GameMode mode)
         {
             Mode = mode;
             SetWatching(mode == GameMode.Watch);
             ai.FeedOnly = mode == GameMode.Tutorial;
+            playerSwing.AutoStroke = EasyPlay;
         }
 
         void UpdateInput()

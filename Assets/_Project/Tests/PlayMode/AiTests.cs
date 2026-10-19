@@ -113,6 +113,14 @@ namespace FirstPersonTennis.Tests
         [UnityTest, Explicit("선수 밸런스 측정은 오래 걸려 따로 돌린다"), Timeout(4 * 60 * 60 * 1000)]
         public IEnumerator CharacterBalanceReportOnGrass() => BalanceReport(CourtType.Grass);
 
+        // 하드 코트, 어려움 난이도 AI끼리
+        [UnityTest, Explicit("선수 밸런스 측정은 오래 걸려 따로 돌린다"), Timeout(4 * 60 * 60 * 1000)]
+        public IEnumerator CharacterBalanceReportHardAi() => BalanceReport(CourtType.Hard, difficulty: AiDifficulty.Hard);
+
+        // 공격형이 들어간 3개 조합만, 하드 코트·어려움 난이도. 힘 효과를 바꿀 때
+        [UnityTest, Explicit("선수 밸런스 측정은 오래 걸려 따로 돌린다"), Timeout(4 * 60 * 60 * 1000)]
+        public IEnumerator AttackTypeBalanceHardAi() => BalanceReport(CourtType.Hard, "공격형", AiDifficulty.Hard);
+
         // 수비형이 들어간 3개 조합만 하드·클레이·잔디에서 이어서 잰다 (약 30분)
         [UnityTest, Explicit("선수 밸런스 측정은 오래 걸려 따로 돌린다"), Timeout(4 * 60 * 60 * 1000)]
         public IEnumerator DefensiveTypeBalanceAllCourts()
@@ -131,20 +139,20 @@ namespace FirstPersonTennis.Tests
 
         // 조합마다 자리를 바꿔 두 번 재고(각 PointsPerSide 포인트), 끝나는 대로 바로 로그를 남긴다 (중간에 멈춰도 결과가 남음).
         // 순서는 라운드 로빈이라 앞쪽 절반만 재도 모든 선수가 한 번씩 나온다. focus가 있으면 그 선수가 들어간 조합만 잰다.
-        IEnumerator BalanceReport(CourtType court, string focus = null)
+        IEnumerator BalanceReport(CourtType court, string focus = null, AiDifficulty difficulty = AiDifficulty.Normal)
         {
             const int PointsPerSide = 160;
             yield return LoadMatch(court);
             CharacterPreset[] roster = referee.Config.characters;
-            var summary = new StringBuilder($"[Balance {court}] 앞 선수가 딴 포인트 % (자리 바꿔 평균, 계산한 세트 승률 %)\n");
+            var summary = new StringBuilder($"[Balance {court} {difficulty}] 앞 선수가 딴 포인트 % (자리 바꿔 평균, 계산한 세트 승률 %)\n");
             Time.captureDeltaTime = 1f / 60f;
 
             foreach ((int a, int b) in RoundRobin(roster.Length))
             {
                 if (focus != null && roster[a].name != focus && roster[b].name != focus) continue;
                 float aNear = 0f, bNear = 0f;
-                yield return MeasurePoints(a, b, PointsPerSide, p => aNear = p);
-                yield return MeasurePoints(b, a, PointsPerSide, p => bNear = p);
+                yield return MeasurePoints(a, b, PointsPerSide, difficulty, p => aNear = p);
+                yield return MeasurePoints(b, a, PointsPerSide, difficulty, p => bNear = p);
                 float aWins = (aNear + (1f - bNear)) * 0.5f;
                 string line = $"{roster[a].name} vs {roster[b].name}: {roster[a].name} {aWins * 100f:0.0}% " +
                               $"(세트 {SetWinProbability(aWins) * 100f:0}%, 가까운 쪽 {aNear * 100f:0}% · 먼 쪽 {(1f - bNear) * 100f:0}%)";
@@ -155,7 +163,7 @@ namespace FirstPersonTennis.Tests
         }
 
         // near 선수(가까운 쪽 AI)가 far 선수를 상대로 딴 포인트 비율
-        IEnumerator MeasurePoints(int near, int far, int points, System.Action<float> done)
+        IEnumerator MeasurePoints(int near, int far, int points, AiDifficulty difficulty, System.Action<float> done)
         {
             int nearWins = 0, farWins = 0;
             void Count(int winner, PointReason reason)
@@ -165,11 +173,11 @@ namespace FirstPersonTennis.Tests
             }
             referee.PointEnded += Count;
             referee.SetCharacters(near, far);
-            referee.StartWatch(new MatchRules { format = MatchFormat.BestOfThree }, AiDifficulty.Normal);
+            referee.StartWatch(new MatchRules { format = MatchFormat.BestOfThree }, difficulty);
             while (nearWins + farWins < points)
             {
                 if (referee.Phase == MatchPhase.MatchOver)
-                    referee.StartWatch(new MatchRules { format = MatchFormat.BestOfThree }, AiDifficulty.Normal);
+                    referee.StartWatch(new MatchRules { format = MatchFormat.BestOfThree }, difficulty);
                 yield return null;
             }
             referee.PointEnded -= Count;

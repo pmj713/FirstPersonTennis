@@ -97,6 +97,16 @@ namespace FirstPersonTennis.Tests
             Assert.AreEqual(0f, i.Aim);
         }
 
+        // 설정의 데드존: 좌우로 그보다 짧게 끌면 가운데
+        [Test]
+        public void DeadZoneSettingDecidesWhetherShortSideDragAims()
+        {
+            var shortSide = new Vector2(0.02f, 0f);
+            Assert.AreEqual(0f, ShotGestureInput.Classify(shortSide, 0f).Aim, "기본 데드존 3%");
+            Assert.Greater(ShotGestureInput.Classify(shortSide, 0f, 0.01f).Aim, 0f, "데드존 1%");
+            Assert.AreEqual(0f, ShotGestureInput.Classify(new Vector2(0.04f, 0f), 0f, 0.05f).Aim, "데드존 5%");
+        }
+
         [Test]
         public void DragDownLeftIsSliceToTheLeft()
         {

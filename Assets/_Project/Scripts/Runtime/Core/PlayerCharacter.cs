@@ -68,7 +68,7 @@ namespace FirstPersonTennis
 
         public static StatTuning Default => new StatTuning
         {
-            powerSpeedAtMax = 0.05f,
+            powerSpeedAtMax = 0.1f, // 1포인트당 0.2%
             techniqueErrorAtMax = 0.4f, techniqueSpinAtMax = 0.25f, techniqueAimMarginAtMax = 0.8f,
             speedMoveAtMax = 0.1f, speedRecoveryAtMax = 0.25f, speedSlideAtMax = 0.5f,
         };

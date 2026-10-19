@@ -10,7 +10,7 @@ namespace FirstPersonTennis
     // 튜토리얼: 이동 → 선입력 → 구질 5종 → 발리 → 서브를 과제 하나씩 연습한다.
     // 심판은 자리와 공만 준비하고 (AI는 정해진 공을 주기만 함), 과제 성공은 여기서 본다:
     // 친 공이 상대 코트에 들어갔고 과제가 원하는 샷인지. 자동 기본 스트로크로 친 공은 세지 않는다.
-    // 보조 표시(낙하 지점·범위 링·범위 알림)는 튜토리얼 동안 모두 켠다 (AssistVisuals가 Active를 본다).
+    // 보조 표시(낙하 지점 마커·범위 알림)는 튜토리얼 동안 켜고, 자동 기본 스트로크는 끈다 (MatchReferee.AssistDisplays).
     public class TutorialDirector : MonoBehaviour
     {
         [SerializeField] TennisConfig config;

@@ -26,6 +26,8 @@ namespace FirstPersonTennis
         public float walkSpeed = 4f;
         public float runSpeed = 7f;
         public float acceleration = 30f;
+        [Tooltip("베이스라인 쪽(뒤)으로 갈 때 속도 배율. 현실처럼 뒷걸음은 앞·옆보다 느리다 (대각선 뒤는 그 사이)")]
+        [Range(0.3f, 1f)] public float backwardSpeedScale = 0.6f;
         public float eyeHeight = 1.7f;
 
         [Header("카메라")]
@@ -146,15 +148,6 @@ namespace FirstPersonTennis
                  "(참고: 뛰면서 침 0.35, 품질 '좋음'은 합계 0.2 미만)")]
         [Range(0f, 0.5f)] public float aimErrorPenalty = 0.1f;
 
-        [Header("보조")]
-        [Tooltip("보조 많음: 선입력이 없으면 기본 스트로크를 자동으로 친다")]
-        public bool autoStrokeWhenNoInput;
-        public bool showLandingMarker = true;
-        [Tooltip("위에서 본 코트 미니맵 (플레이 중 M 키로 켜고 끔)")]
-        public bool showMinimap = true;
-        public bool showHitRangeRing = true;
-        public bool hitZoneAlert = true;
-
         [Header("선수")]
         [Tooltip("프리셋 선수 목록. 스탯은 0~100 (기준 50), 효과는 아래 statTuning (스탯 100일 때 바뀌는 비율)")]
         public CharacterPreset[] characters = CharacterPreset.DefaultRoster();
@@ -186,7 +179,7 @@ namespace FirstPersonTennis
         };
         public AiProfile aiHard = new AiProfile
         {
-            reactionDelay = 0.12f, speed = 6.8f, acceleration = 30f, errorScale = 0.35f, smartAim = 0.85f,
+            reactionDelay = 0.12f, speed = 7f, acceleration = 30f, errorScale = 0.35f, smartAim = 0.85f, // 달리기는 플레이어와 같다
             sliceChance = 0.2f, lobChance = 0.06f, dropShotChance = 0.07f, lobVsNetChance = 0.6f,
             misjudgeChance = 0.02f, serveTimingError = 0.08f, firstServeFlatChance = 0.6f,
             netRushChance = 0.3f, serveVolleyChance = 0.12f, anticipation = 1f, recoverySpeed = 1f,

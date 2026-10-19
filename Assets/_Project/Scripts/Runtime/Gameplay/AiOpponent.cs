@@ -163,20 +163,24 @@ namespace FirstPersonTennis
             UpdateStamina(dt);
         }
 
-        // 걸어서도 제때 닿으면 걷는다. 늦으면 뛴다 (지치면 걷기가 최고 속도).
+        // 걸어서도 제때 닿으면 걷는다. 늦으면 뛴다 (지치면 걷기가 최고 속도). 뒤로 가는 길이면 그만큼 느리게 본다
         float PaceFor(Vector3 target, float seconds)
         {
             Vector3 to = target - transform.position;
             to.y = 0f;
             float needed = to.magnitude / Mathf.Max(0.05f, seconds - PaceMargin);
-            return needed <= WalkSpeed ? WalkSpeed : RunSpeed;
+            return needed <= Toward(to, WalkSpeed) ? WalkSpeed : RunSpeed;
         }
+
+        // 그 방향으로 낼 수 있는 속도 (뒷걸음은 느리다, 플레이어와 같은 규칙)
+        float Toward(Vector3 direction, float speed) => speed * Court.DirectionSpeedScale(direction, Side, config.backwardSpeedScale);
 
         void Move(Vector3 target, float maxSpeed, float dt)
         {
             Vector3 to = target - transform.position;
             to.y = 0f;
             float distance = to.magnitude;
+            maxSpeed = Toward(to, maxSpeed);
             // 미끄러운 바닥에서는 멈추는 데 걸리는 거리만큼 일찍 속도를 줄인다
             float stopSpeed = Mathf.Sqrt(2f * Court.BrakeRate(profile.acceleration, stats.SlideScale) * distance);
             Vector3 desired = distance > 0.02f ? to / distance * Mathf.Min(maxSpeed, distance * 6f, stopSpeed) : Vector3.zero;
@@ -236,7 +240,7 @@ namespace FirstPersonTennis
                     Vector3 volleySpot = swing.SpotFor(volley);
                     Vector3 to = volleySpot - transform.position;
                     to.y = 0f;
-                    if (to.magnitude > RunSpeed * seconds) continue;
+                    if (to.magnitude > Toward(to, RunSpeed) * seconds) continue;
                     spot = volleySpot;
                     return true;
                 }
@@ -368,7 +372,7 @@ namespace FirstPersonTennis
 
             Vector3 to = spot - transform.position;
             to.y = 0f;
-            float pressure = to.magnitude / Mathf.Max(0.05f, seconds - PaceMargin) / Mathf.Max(0.1f, RunSpeed);
+            float pressure = to.magnitude / Mathf.Max(0.05f, seconds - PaceMargin) / Mathf.Max(0.1f, Toward(to, RunSpeed));
             if (pressure >= 0.85f)
             {
                 // 겨우 닿는 공: 높고 깊은 로브로 시간을 벌거나, 낮은 슬라이스로 버틴다

@@ -57,6 +57,15 @@ namespace FirstPersonTennis
             return acceleration * (Surface.traction > 0f ? Surface.traction : 1f);
         }
 
+        // 가는 방향에 따른 속도 배율: 앞(네트 쪽)·옆은 1, 바로 뒤(베이스라인 쪽)는 backwardScale, 대각선 뒤는 그 사이
+        public static float DirectionSpeedScale(Vector3 direction, int side, float backwardScale)
+        {
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 1e-6f) return 1f;
+            float back = Mathf.Max(0f, -direction.normalized.z * Facing(side));
+            return Mathf.Lerp(1f, backwardScale, back);
+        }
+
         // 바닥에서 낼 수 있는 제동 (m/s²)
         public static float BrakeRate(float acceleration, float slideScale = 1f)
         {

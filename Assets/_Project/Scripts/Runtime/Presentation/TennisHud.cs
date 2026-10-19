@@ -23,7 +23,7 @@ namespace FirstPersonTennis
             "클릭만  탑스핀 가운데 · 우클릭  이번 공 보내기",
             "네트 앞(서비스라인 안)에서는 바운드 전에 발리",
             "서브  A/D 위치 · 누르면 토스 · 드래그 ←→ 코너, ↓ 슬라이스, ↑ 킥 · 초록 칸에서 놓기",
-            "- =  공 템포 · M 미니맵 · V 시점 · [ ] 시야각 · R 범위 링",
+            "- =  공 템포 · V 시점 · [ ] 시야각",
             "T 슬로모션 · Esc 일시정지 · H 도움말",
         };
 
@@ -40,7 +40,13 @@ namespace FirstPersonTennis
         string qualityReasons;
         float qualityUntil;
         bool showHelp = true;
-        bool showMinimap;
+
+        // 설정 화면과 그 안의 드래그 연습 칸
+        bool showSettings;
+        bool padDragging;
+        Vector2 padStart, padCurrent;
+        float padMaxRise;
+        string padResult = "";
         Texture2D dot;
 
         // 시작 메뉴 선택
@@ -52,7 +58,6 @@ namespace FirstPersonTennis
 
         void Start()
         {
-            showMinimap = config.showMinimap;
             menuRules = config.defaultRules;
             menuDifficulty = config.defaultDifficulty;
             menuPlayerCharacter = config.defaultPlayerCharacter;
@@ -98,10 +103,12 @@ namespace FirstPersonTennis
         {
             Keyboard kb = Keyboard.current;
             if (kb == null) return;
-            if (kb.escapeKey.wasPressedThisFrame && referee.Phase != MatchPhase.Menu && referee.Phase != MatchPhase.MatchOver)
-                referee.SetPaused(!referee.Paused);
+            if (kb.escapeKey.wasPressedThisFrame)
+            {
+                if (showSettings) CloseSettings(); // 설정을 닫고 일시정지 메뉴로 돌아간다
+                else if (referee.Phase != MatchPhase.Menu && referee.Phase != MatchPhase.MatchOver) referee.SetPaused(!referee.Paused);
+            }
             if (kb.hKey.wasPressedThisFrame) showHelp = !showHelp;
-            if (kb.mKey.wasPressedThisFrame) showMinimap = !showMinimap;
             if (kb.tKey.wasPressedThisFrame && !referee.Paused) Time.timeScale = Time.timeScale < 1f ? 1f : 0.5f;
             if (kb.minusKey.wasPressedThisFrame) ChangeBallTempo(-0.05f);
             if (kb.equalsKey.wasPressedThisFrame) ChangeBallTempo(0.05f);
@@ -186,6 +193,13 @@ namespace FirstPersonTennis
             EnsureStyles();
             float w = Screen.width, h = Screen.height;
 
+            // 설정은 시작 메뉴나 일시정지 메뉴에서 연다. 열려 있으면 아래 화면의 버튼이 눌리지 않게 설정만 그린다
+            if (showSettings)
+            {
+                DrawSettings(w, h);
+                return;
+            }
+
             if (referee.Phase == MatchPhase.Menu)
             {
                 DrawMenu(w, h);
@@ -217,8 +231,6 @@ namespace FirstPersonTennis
 
             if (input.IsDragging)
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
-
-            if (showMinimap) DrawMinimap();
 
             GUI.Label(new Rect(w - 430f, 12f, 420f, 24f),
                 (cameraRig.ThirdPerson ? "3인칭 (디버그)" : "1인칭") + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
@@ -285,8 +297,11 @@ namespace FirstPersonTennis
             {
                 GUI.Label(new Rect(x, y, cw, 26f), "AI 난이도", small);
                 menuDifficulty = (AiDifficulty)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuDifficulty, DifficultyNames, toolbar);
+                if (menuDifficulty == AiDifficulty.Easy && menuMode != GameMode.Watch)
+                    GUI.Label(new Rect(x, y + 66f, cw, 24f), "보조 켜짐: 낙하 지점 마커 · 타격 범위 알림 · 자동 기본 스트로크", small);
             }
 
+            if (GUI.Button(new Rect(panel.x + 30f, panel.yMax - 72f, 140f, 50f), "설정", button)) OpenSettings();
             if (GUI.Button(new Rect(panel.center.x - 120f, panel.yMax - 72f, 240f, 50f), "시작", button))
             {
                 referee.SetCharacters(menuPlayerCharacter, menuAiCharacter);
@@ -344,7 +359,120 @@ namespace FirstPersonTennis
                     referee.SetPaused(false);
                 }
             }
+            y += 56f;
+            if (GUI.Button(new Rect(w / 2f - 130f, y, 260f, 46f), "설정", button)) OpenSettings();
             if (GUI.Button(new Rect(w / 2f - 130f, y + 56f, 260f, 46f), "메뉴로", button)) referee.ShowMenu();
+        }
+
+        // ── 설정 ──────────────────────────────────────────────
+
+        void OpenSettings()
+        {
+            showSettings = true;
+            padDragging = false;
+            padResult = "";
+        }
+
+        void CloseSettings()
+        {
+            showSettings = false;
+            UserSettings.Save();
+        }
+
+        // 드래그 감도·데드존·카메라 회전 속도·시야각. 아래 칸에서 드래그해 보면 지금 설정으로 어떤 구질이 나오는지 보인다
+        void DrawSettings(float w, float h)
+        {
+            Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.6f));
+            float pw = Mathf.Min(640f, w - 40f), ph = Mathf.Min(620f, h - 20f);
+            var panel = new Rect((w - pw) / 2f, (h - ph) / 2f, pw, ph);
+            Fill(panel, new Color(0.05f, 0.08f, 0.12f, 0.95f));
+            GUI.Label(new Rect(panel.x, panel.y + 14f, pw, 40f), "설정", big);
+
+            // 바뀐 값만 저장한다 (안 건드린 값은 기본값을 계속 따른다)
+            float x = panel.x + 30f, cw = pw - 60f, y = panel.y + 66f;
+            float sensitivity = UserSettings.DragSensitivity;
+            float v = SettingSlider(ref y, x, cw, "드래그 감도", $"{sensitivity:0.00}배",
+                "클수록 짧게 끌어도 같은 구질·방향이 나와요", sensitivity,
+                UserSettings.MinSensitivity, UserSettings.MaxSensitivity, 0.05f);
+            if (!Mathf.Approximately(v, sensitivity)) UserSettings.DragSensitivity = v;
+
+            float deadZone = UserSettings.DragDeadZone;
+            v = SettingSlider(ref y, x, cw, "드래그 데드존", $"화면 높이의 {deadZone * 100f:0.0}%",
+                "좌우로 이보다 짧게 끌면 방향 없이 가운데로 쳐요", deadZone,
+                UserSettings.MinDeadZone, UserSettings.MaxDeadZone, 0.005f);
+            if (!Mathf.Approximately(v, deadZone)) UserSettings.DragDeadZone = v;
+
+            float turn = UserSettings.CameraTurnSpeed;
+            v = SettingSlider(ref y, x, cw, "카메라 회전 속도", $"{turn:0.0}배",
+                "공을 따라 고개를 돌리는 빠르기 (느릴수록 멀미가 덜해요)", turn,
+                UserSettings.MinTurnSpeed, UserSettings.MaxTurnSpeed, 0.1f);
+            if (!Mathf.Approximately(v, turn)) UserSettings.CameraTurnSpeed = v;
+
+            float fov = cameraRig.HorizontalFov;
+            v = SettingSlider(ref y, x, cw, "시야각", $"{fov:0}°",
+                "넓을수록 주변이 보이지만 코트가 멀어 보여요 (플레이 중 [ ] 키)", fov, UserSettings.MinFov, UserSettings.MaxFov, 1f);
+            if (!Mathf.Approximately(v, fov)) UserSettings.SetHorizontalFov(v);
+
+            DrawDragPad(new Rect(x, y + 4f, cw, Mathf.Max(80f, panel.yMax - 76f - (y + 4f))));
+
+            float by = panel.yMax - 62f;
+            if (GUI.Button(new Rect(x, by, 160f, 44f), "기본값으로", button))
+            {
+                UserSettings.ResetToDefaults();
+                padResult = "";
+            }
+            if (GUI.Button(new Rect(panel.xMax - 190f, by, 160f, 44f), "닫기 (Esc)", button)) CloseSettings();
+        }
+
+        // 이름·값 한 줄, 설명 한 줄, 슬라이더. step 단위로 맞춘다
+        float SettingSlider(ref float y, float x, float width, string label, string value, string hint,
+            float current, float min, float max, float step)
+        {
+            GUI.Label(new Rect(x, y, width, 26f), label, text);
+            GUI.Label(new Rect(x, y, width, 26f), value, smallRight);
+            GUI.Label(new Rect(x, y + 24f, width, 22f), hint, small);
+            float v = GUI.HorizontalSlider(new Rect(x, y + 50f, width, 20f), current, min, max);
+            y += 78f;
+            return Mathf.Clamp(Mathf.Round(v / step) * step, min, max);
+        }
+
+        // 연습 칸: 경기와 같은 계산(감도 곱하기, 데드존)으로 드래그를 구질로 바꿔 보여 준다. 화면 위쪽이 + 방향
+        void DrawDragPad(Rect pad)
+        {
+            Fill(pad, new Color(1f, 1f, 1f, 0.06f));
+            Event e = Event.current;
+            if (e.type == EventType.MouseDown && e.button == 0 && pad.Contains(e.mousePosition))
+            {
+                padDragging = true;
+                padStart = padCurrent = e.mousePosition;
+                padMaxRise = 0f;
+                e.Use();
+            }
+            else if (padDragging && e.type == EventType.MouseDrag)
+            {
+                padCurrent = e.mousePosition;
+                e.Use();
+            }
+
+            ShotIntent intent = default;
+            if (padDragging)
+            {
+                Vector2 d = padCurrent - padStart;
+                Vector2 delta = new Vector2(d.x, -d.y) / Mathf.Max(1, Screen.height) * UserSettings.DragSensitivity;
+                padMaxRise = Mathf.Max(padMaxRise, delta.y);
+                intent = ShotGestureInput.Classify(delta, padMaxRise, UserSettings.DragDeadZone);
+                DrawLine(padStart, padCurrent, 4f, new Color(1f, 1f, 1f, 0.85f));
+            }
+            if (padDragging && e.type == EventType.MouseUp)
+            {
+                padDragging = false;
+                padResult = "결과: " + Describe(intent, false);
+                e.Use();
+            }
+
+            string line = padDragging ? "드래그 중: " + Describe(intent, false) :
+                padResult.Length > 0 ? padResult : "여기서 좌클릭 드래그해 보기 — 지금 설정으로 나오는 구질과 방향";
+            GUI.Label(new Rect(pad.x + 10f, pad.y + pad.height / 2f - 30f, pad.width - 20f, 60f), line, textCenter); // 두 줄까지
         }
 
         void DrawTutorialDone(float w, float h)
@@ -519,45 +647,7 @@ namespace FirstPersonTennis
         static string AimName(float aim) => aim < -0.1f ? $"← {Mathf.Abs(aim) * 100f:0}%" :
             aim > 0.1f ? $"→ {aim * 100f:0}%" : "가운데";
 
-        // ── 미니맵 · 상태 ─────────────────────────────────────
-
-        // 위에서 본 코트. 내 코트가 아래쪽, 내 오른쪽이 오른쪽.
-        void DrawMinimap()
-        {
-            float halfW = Court.PlayableHalfWidth, halfD = Court.PlayableDepth;
-            float s = Mathf.Min(170f / (2f * halfW), 260f / (2f * halfD));
-            var area = new Rect(Screen.width - 2f * halfW * s - 14f, 42f, 2f * halfW * s, 2f * halfD * s);
-            Vector2 c = area.center;
-            float f = Court.Facing(player.Side);
-            Vector2 Map(Vector3 p) => new Vector2(c.x + p.x * s * f, c.y - p.z * s * f);
-
-            void WorldRect(float x0, float z0, float x1, float z1, Color color)
-            {
-                Vector2 a = Map(new Vector3(x0, 0f, z0)), b = Map(new Vector3(x1, 0f, z1));
-                Fill(new Rect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y),
-                    Mathf.Max(1f, Mathf.Abs(b.x - a.x)), Mathf.Max(1f, Mathf.Abs(b.y - a.y))), color);
-            }
-
-            float hl = Court.HalfLength, sw = Court.SinglesHalfWidth, dw = Court.DoublesHalfWidth, sl = Court.ServiceLine;
-            var line = new Color(1f, 1f, 1f, 0.85f);
-            Fill(area, new Color(0.08f, 0.3f, 0.2f, 0.75f));
-            WorldRect(-dw, -hl, dw, hl, new Color(0.15f, 0.35f, 0.65f, 0.9f));
-            foreach (float z in new[] { -hl, hl }) WorldRect(-dw, z, dw, z, line);
-            foreach (float x in new[] { -dw, -sw, sw, dw }) WorldRect(x, -hl, x, hl, line);
-            foreach (float z in new[] { -sl, sl }) WorldRect(-sw, z, sw, z, line);
-            WorldRect(0f, -sl, 0f, sl, line);
-            WorldRect(-Court.NetPostX, -0.15f, Court.NetPostX, 0.15f, new Color(0.85f, 0.85f, 0.85f));
-
-            if (playerSwing.HasLanding && Court.SideOf(playerSwing.LandingPoint.z) == player.Side)
-                Dot(Map(playerSwing.LandingPoint), 10f, new Color(1f, 0.85f, 0.1f));
-            if (tutorial.TargetActive) Dot(Map(tutorial.TargetPosition), 12f, new Color(0.3f, 0.95f, 0.4f));
-            Dot(Map(referee.Ai.transform.position), 9f, new Color(0.95f, 0.3f, 0.25f));
-            Transform near = referee.Watching && referee.NearAi != null ? referee.NearAi.transform : player.transform;
-            Dot(Map(near.position), 9f, new Color(0.35f, 0.6f, 1f));
-            Dot(Map(referee.Ball.transform.position), 6f, Color.white);
-
-            GUI.Label(new Rect(area.x - 60f, area.yMax + 2f, area.width + 60f, 20f), "파랑 나 · 빨강 상대 · 노랑 낙하", smallRight);
-        }
+        // ── 상태 ──────────────────────────────────────────────
 
         void Dot(Vector2 center, float size, Color color)
         {
@@ -641,7 +731,7 @@ namespace FirstPersonTennis
             else if (input.HasIntent) state = $"선입력: {Describe(input.Intent, playerSwing.InVolleyZone)}";
             else if (input.SkipRequested) state = "이번 공은 보냄";
             else if (input.WindowOpen)
-                state = config.autoStrokeWhenNoInput ? "입력 가능 · 입력이 없으면 자동 스트로크" : "입력 가능 — 좌클릭 드래그";
+                state = playerSwing.AutoStroke ? "입력 가능 · 입력이 없으면 자동 스트로크" : "입력 가능 — 좌클릭 드래그";
             else state = "대기";
 
             Fill(new Rect(w / 2f - 260f, h - 92f, 520f, 74f), new Color(0f, 0f, 0f, 0.45f));

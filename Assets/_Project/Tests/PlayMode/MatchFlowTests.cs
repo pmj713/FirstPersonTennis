@@ -88,6 +88,28 @@ namespace FirstPersonTennis.Tests
                 $"서브가 들어가야 함. 콜: {string.Join(", ", calls)}");
         }
 
+        // 보조(낙하 지점 마커·범위 알림·자동 기본 스트로크)는 쉬움에서만. 튜토리얼은 표시만 켠다
+        [UnityTest]
+        public IEnumerator AssistsTurnOnOnlyForEasy()
+        {
+            yield return LoadMatch();
+            referee.StartPractice(AiDifficulty.Easy);
+            Assert.IsTrue(referee.AssistDisplays);
+            Assert.IsTrue(swing.AutoStroke);
+
+            referee.StartMatch(new MatchRules { format = MatchFormat.OneSet }, AiDifficulty.Normal);
+            Assert.IsFalse(referee.AssistDisplays);
+            Assert.IsFalse(swing.AutoStroke);
+
+            referee.StartMatch(new MatchRules { format = MatchFormat.OneSet }, AiDifficulty.Easy);
+            Assert.IsTrue(referee.AssistDisplays);
+            Assert.IsTrue(swing.AutoStroke);
+
+            Object.FindAnyObjectByType<TutorialDirector>().Begin();
+            Assert.IsTrue(referee.AssistDisplays, "튜토리얼은 표시 보조를 켠다");
+            Assert.IsFalse(swing.AutoStroke, "튜토리얼은 자동 스트로크를 끈다");
+        }
+
         // 타이브레이크 한 판을 끝까지: 서브, 리턴, 랠리 판정, 점수, 경기 종료
         [UnityTest]
         public IEnumerator TiebreakMatchPlaysToTheEnd()

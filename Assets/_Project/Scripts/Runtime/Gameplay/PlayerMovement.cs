@@ -60,7 +60,8 @@ namespace FirstPersonTennis
             bool moving = input.sqrMagnitude > 0.01f;
             IsSprinting = sprintHeld && moving && !Exhausted;
 
-            float speed = (IsSprinting ? config.runSpeed : config.walkSpeed) * Stats.MoveScale;
+            float speed = (IsSprinting ? config.runSpeed : config.walkSpeed) * Stats.MoveScale *
+                          Court.DirectionSpeedScale(wish, side, config.backwardSpeedScale); // 뒷걸음은 느리다
             Vector3 target = wish * speed;
             Velocity = Vector3.MoveTowards(Velocity, target, Court.MoveRate(Velocity, target, config.acceleration, Stats.SlideScale) * Time.deltaTime);
             UpdateStamina(Time.deltaTime);

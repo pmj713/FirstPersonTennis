@@ -143,17 +143,14 @@ namespace FirstPersonTennis.EditorTools
             Transform shadow = CreateRing("BallShadow", 0f, 0.5f, m.Shadow);
             Transform landing = CreateRing("LandingMarker", 0.35f, 0.5f, m.Marker);
             landing.localScale = Vector3.one * 0.7f;
-            Transform range = CreateRing("HitRangeRing", 0.95f, 1f, m.Range);
             Transform target = CreateRing("TutorialTarget", 0.5f, 0.7f, m.TutorialTarget); // 바깥 반지름 = 도착 판정 거리
             target.gameObject.SetActive(false);
             var assists = systems.AddComponent<AssistVisuals>();
-            Set(assists, "config", config);
+            Set(assists, "referee", referee);
             Set(assists, "ball", ball);
             Set(assists, "playerSwing", playerSwing);
-            Set(assists, "player", playerRoot);
             Set(assists, "ballShadow", shadow);
             Set(assists, "landingMarker", landing);
-            Set(assists, "hitRangeRing", range);
             Set(assists, "ballHalo", halo);
             Set(assists, "audioFeedback", audio);
             Set(assists, "tutorial", tutorial);
@@ -343,7 +340,6 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Net = Transparent("Net", new Color(0.05f, 0.05f, 0.05f, 0.55f), true);
             public readonly Material Shadow = Transparent("BallShadow", new Color(0f, 0f, 0f, 0.55f));
             public readonly Material Marker = Transparent("LandingMarker", new Color(1f, 0.85f, 0.1f, 0.85f));
-            public readonly Material Range = Transparent("HitRange", new Color(1f, 1f, 1f, 0.35f));
             public readonly Material Halo = Transparent("BallHalo", new Color(0.3f, 0.9f, 1f, 0.35f));
             public readonly Material TutorialTarget = Transparent("TutorialTarget", new Color(0.3f, 0.95f, 0.4f, 0.85f));
             public readonly Material BallMark = Transparent("BallMark", new Color(0.38f, 0.16f, 0.08f, 0.6f));

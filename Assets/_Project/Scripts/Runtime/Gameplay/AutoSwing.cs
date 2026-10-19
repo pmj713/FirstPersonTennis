@@ -54,6 +54,8 @@ namespace FirstPersonTennis
         public int Side => side;
         public float ErrorScale { get => errorScale; set => errorScale = value; } // AI 난이도
         public PlayerStats Stats { get; set; } = PlayerStats.Neutral;                // 선수 스탯 (힘·기술)
+        // 선입력이 없으면 기본 스트로크(탑스핀, 가운데)를 자동으로 친다. 공을 보내려면 우클릭 (쉬움 난이도의 보조)
+        public bool AutoStroke { get; set; }
         public bool IsSwinging { get; private set; }
         public bool HasContact { get; private set; }
         public Vector3 ContactPoint { get; private set; }
@@ -148,7 +150,7 @@ namespace FirstPersonTennis
             bool hasIntent = source != null && source.TryGetIntent(out intent);
             bool skip = source != null && source.SkipRequested;
             bool auto = false;
-            if (!hasIntent && !skip && config.autoStrokeWhenNoInput)
+            if (!hasIntent && !skip && AutoStroke)
             {
                 intent = ShotIntent.Default;
                 hasIntent = true;

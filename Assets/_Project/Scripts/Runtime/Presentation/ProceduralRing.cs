@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    // 바닥에 눕힌 고리(또는 원판) 메시. 공 그림자, 낙하 지점 마커, 타격 범위 링에 쓴다.
+    // 바닥에 눕힌 고리(또는 원판) 메시. 공 그림자, 낙하 지점 마커, 튜토리얼 목표 원에 쓴다.
     [ExecuteAlways]
     [RequireComponent(typeof(MeshFilter))]
     public class ProceduralRing : MonoBehaviour

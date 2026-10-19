@@ -13,8 +13,8 @@ namespace FirstPersonTennis
         [SerializeField] TennisBall ball;
         [SerializeField] AutoSwing swing;
 
-        // 길이는 모두 화면 높이 대비 비율 (해상도와 무관)
-        public const float DeadZone = 0.03f;       // 좌우 방향
+        // 길이는 모두 화면 높이 대비 비율 (해상도와 무관). 실제 드래그에는 설정의 감도를 곱하고 데드존을 쓴다 (UserSettings)
+        public const float DeadZone = UserSettings.DefaultDeadZone; // 좌우 방향
         public const float SliceThreshold = 0.05f;
         public const float LobThreshold = 0.08f;   // 로브는 실수로 나가면 치명적이라 더 길게 밀어야 한다
         public const float MinVerticalAngle = 25f; // 이보다 눕힌 드래그는 좌우 방향으로만 본다 (도)
@@ -64,9 +64,9 @@ namespace FirstPersonTennis
             if (IsDragging)
             {
                 DragCurrent = position;
-                Vector2 delta = (position - DragStart) / height;
+                Vector2 delta = (position - DragStart) / height * UserSettings.DragSensitivity;
                 maxRise = Mathf.Max(maxRise, delta.y);
-                DragPreview = Classify(delta, maxRise);
+                DragPreview = Classify(delta, maxRise, UserSettings.DragDeadZone);
 
                 if (mouse.leftButton.wasReleasedThisFrame)
                 {
@@ -93,11 +93,11 @@ namespace FirstPersonTennis
             SkipRequested = true;
         }
 
-        // delta: 드래그 이동량 (화면 높이 대비), maxRise: 드래그 중 가장 높이 올라간 양
-        public static ShotIntent Classify(Vector2 delta, float maxRise)
+        // delta: 드래그 이동량 (화면 높이 대비, 감도 적용), maxRise: 드래그 중 가장 높이 올라간 양
+        public static ShotIntent Classify(Vector2 delta, float maxRise, float deadZone = DeadZone)
         {
             var intent = new ShotIntent { Type = ShotType.Topspin, Depth = 1f };
-            if (Mathf.Abs(delta.x) >= DeadZone) intent.Aim = Mathf.Clamp(delta.x / FullAim, -1f, 1f);
+            if (Mathf.Abs(delta.x) >= deadZone) intent.Aim = Mathf.Clamp(delta.x / FullAim, -1f, 1f);
 
             bool smash = maxRise >= SmashStroke && maxRise - delta.y >= SmashStroke;
             bool steep = Mathf.Abs(delta.y) >= Mathf.Abs(delta.x) * Mathf.Tan(MinVerticalAngle * Mathf.Deg2Rad);

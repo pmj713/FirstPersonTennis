@@ -12,11 +12,57 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03355a96bd7b9374a82e5b9dfbdeb6ab, type: 3}
   m_Name: TennisConfig
   m_EditorClassIdentifier: FirstPersonTennis::FirstPersonTennis.TennisConfig
+  defaultCourt: 0
+  hardCourt:
+    name: "\uD558\uB4DC"
+    restitution: 0.73
+    friction: 0.55
+    speedRetention: 1
+    traction: 1
+    braking: 1
+    leavesMarks: 0
+    courtColor: {r: 0.13, g: 0.32, b: 0.58, a: 1}
+    surroundColor: {r: 0.16, g: 0.36, b: 0.27, a: 1}
+    aiNetRushBonus: 0
+    aiServeVolleyBonus: 0
+    aiSliceBonus: 0
+    aiLobBonus: 0
+    aiDropShotBonus: 0
+  clayCourt:
+    name: "\uD074\uB808\uC774"
+    restitution: 0.82
+    friction: 0.9
+    speedRetention: 0.9
+    traction: 0.9
+    braking: 0.45
+    leavesMarks: 1
+    courtColor: {r: 0.72, g: 0.36, b: 0.22, a: 1}
+    surroundColor: {r: 0.64, g: 0.32, b: 0.2, a: 1}
+    aiNetRushBonus: -0.1
+    aiServeVolleyBonus: -0.05
+    aiSliceBonus: 0
+    aiLobBonus: 0.04
+    aiDropShotBonus: 0.04
+  grassCourt:
+    name: "\uC794\uB514"
+    restitution: 0.62
+    friction: 0.3
+    speedRetention: 1
+    traction: 0.75
+    braking: 0.6
+    leavesMarks: 0
+    courtColor: {r: 0.3, g: 0.52, b: 0.22, a: 1}
+    surroundColor: {r: 0.22, g: 0.43, b: 0.18, a: 1}
+    aiNetRushBonus: 0.15
+    aiServeVolleyBonus: 0.2
+    aiSliceBonus: 0.1
+    aiLobBonus: -0.03
+    aiDropShotBonus: -0.02
   courtWidthScale: 2
   courtLengthScale: 1
   ballDiameter: 0.3
   walkSpeed: 4
-  runSpeed: 7
+  runSpeed: 10
   acceleration: 30
   eyeHeight: 1.7
   horizontalFov: 75
@@ -127,14 +173,60 @@ MonoBehaviour:
   baseAzimuthError: 0.6
   azimuthErrorPerBad: 2.5
   aimErrorPenalty: 0.1
-  autoStrokeWhenNoInput: 0
-  showLandingMarker: 1
-  showMinimap: 1
-  showHitRangeRing: 1
-  hitZoneAlert: 1
+  characters:
+  - name: "\uADE0\uD615\uD615"
+    description: "\uC785\uBB38\uC6A9, \uC57D\uC810 \uC5C6\uC74C"
+    power: 50
+    technique: 50
+    speed: 50
+    sliceTendency: 1
+    lobTendency: 1
+    dropShotTendency: 1
+    flatServeBias: 0
+    aimBoldness: 1
+  - name: "\uACF5\uACA9\uD615"
+    description: "\uAC15\uD55C \uC11C\uBE0C\xB7\uC2A4\uD2B8\uB85C\uD06C, \uBC1C\uC774 \uB290\uB9BC, \uC794\uB514 \uC720\uB9AC"
+    power: 80
+    technique: 40
+    speed: 30
+    sliceTendency: 0.8
+    lobTendency: 0.8
+    dropShotTendency: 0.8
+    flatServeBias: 0.1
+    aimBoldness: 1
+  - name: "\uCEE8\uD2B8\uB864\uD615"
+    description: "\uC624\uCC28 \uC791\uACE0 \uC2A4\uD540 \uAC15\uD568, \uB4DC\uB86D\uC0F7\xB7\uB85C\uBE0C"
+    power: 30
+    technique: 80
+    speed: 40
+    sliceTendency: 1.1
+    lobTendency: 1
+    dropShotTendency: 1.2
+    flatServeBias: 0
+    aimBoldness: 1
+  - name: "\uC218\uBE44\uD615"
+    description: "\uB113\uC740 \uC218\uBE44, \uD074\uB808\uC774 \uC720\uB9AC"
+    power: 30
+    technique: 40
+    speed: 80
+    sliceTendency: 1.1
+    lobTendency: 1.1
+    dropShotTendency: 0.8
+    flatServeBias: -0.1
+    aimBoldness: 1
+  statTuning:
+    powerSpeedAtMax: 0.1
+    techniqueErrorAtMax: 0.4
+    techniqueAimMarginAtMax: 0.8
+    techniqueSpinAtMax: 0.25
+    speedMoveAtMax: 0.1
+    speedRecoveryAtMax: 0.25
+    speedSlideAtMax: 0.5
+  defaultPlayerCharacter: 0
+  defaultAiCharacter: 0
   aiEasy:
     reactionDelay: 0.4
-    speed: 5
+    speed: 6
     acceleration: 18
     errorScale: 0.9
     smartAim: 0.15
@@ -145,9 +237,13 @@ MonoBehaviour:
     misjudgeChance: 0.2
     serveTimingError: 0.2
     firstServeFlatChance: 0.3
+    netRushChance: 0
+    serveVolleyChance: 0
+    anticipation: 0
+    recoverySpeed: 0.6
   aiNormal:
     reactionDelay: 0.25
-    speed: 6
+    speed: 8
     acceleration: 24
     errorScale: 0.6
     smartAim: 0.5
@@ -158,9 +254,13 @@ MonoBehaviour:
     misjudgeChance: 0.08
     serveTimingError: 0.13
     firstServeFlatChance: 0.5
+    netRushChance: 0.1
+    serveVolleyChance: 0.05
+    anticipation: 0.5
+    recoverySpeed: 1
   aiHard:
     reactionDelay: 0.12
-    speed: 6.8
+    speed: 10
     acceleration: 30
     errorScale: 0.35
     smartAim: 0.85
@@ -171,6 +271,10 @@ MonoBehaviour:
     misjudgeChance: 0.02
     serveTimingError: 0.08
     firstServeFlatChance: 0.6
+    netRushChance: 0.3
+    serveVolleyChance: 0.12
+    anticipation: 1
+    recoverySpeed: 1
   feedSpeedScale: 1
   defaultRules:
     format: 2

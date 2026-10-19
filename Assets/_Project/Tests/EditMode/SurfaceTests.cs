@@ -116,6 +116,17 @@ namespace FirstPersonTennis.Tests
             }
         }
 
+        // 뒷걸음(자기 베이스라인 쪽)은 느리다: 앞·옆 1, 바로 뒤 backwardScale, 대각선 뒤는 그 사이. 양쪽 코트 모두
+        [Test]
+        public void MovingBackTowardOwnBaselineIsSlower()
+        {
+            Assert.AreEqual(1f, Court.DirectionSpeedScale(Vector3.forward, -1, 0.6f), 1e-5f, "근거리: +z = 네트 쪽");
+            Assert.AreEqual(1f, Court.DirectionSpeedScale(Vector3.right, -1, 0.6f), 1e-5f, "옆");
+            Assert.AreEqual(0.6f, Court.DirectionSpeedScale(Vector3.back, -1, 0.6f), 1e-5f, "근거리 뒤");
+            Assert.AreEqual(0.6f, Court.DirectionSpeedScale(Vector3.forward, 1, 0.6f), 1e-5f, "원거리: +z = 자기 베이스라인 쪽");
+            Assert.That(Court.DirectionSpeedScale(new Vector3(1f, 0f, -1f), -1, 0.6f), Is.InRange(0.6f, 1f).And.Not.EqualTo(1f), "대각선 뒤");
+        }
+
         // 값이 비어 있는 바닥(0)은 하드처럼 동작한다: 공이 멈추거나 선수가 못 움직이지 않는다
         [Test]
         public void UnsetSurfaceValuesFallBackToNeutral()
