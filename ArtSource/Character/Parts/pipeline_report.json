@@ -1,0 +1,555 @@
+{
+  "parts": {
+    "Body": {
+      "raw": {
+        "verts": 41690,
+        "tris": 71902,
+        "parts": 195,
+        "boundary_edges": 11160,
+        "nonmanifold_edges": 16,
+        "flipped_faces": 19550,
+        "size_m": [
+          0.997,
+          0.154,
+          0.959
+        ]
+      },
+      "clean": {
+        "raw": {
+          "verts": 41690,
+          "tris": 71902
+        },
+        "after_weld": {
+          "verts": 35953,
+          "tris": 71872,
+          "parts": 1,
+          "boundary_edges": 67,
+          "nonmanifold_edges": 33,
+          "flipped_faces": 14
+        },
+        "slit_verts_zipped": 33,
+        "duplicate_faces_removed": 0,
+        "loose_verts_removed": 0,
+        "holes_filled": 0,
+        "tears": {
+          "passes": 2,
+          "tears_closed": 3,
+          "bad_edges_left": 0
+        },
+        "after": {
+          "verts": 35914,
+          "tris": 71828,
+          "parts": 1,
+          "boundary_edges": 0,
+          "nonmanifold_edges": 0,
+          "flipped_faces": 0
+        }
+      },
+      "hidden_under_clothes": {
+        "verts_by_region": {
+          "Top": 9614,
+          "Bottom": 3716,
+          "Shoes": 132,
+          "feet_in_shoes": 3833
+        },
+        "faces_removed": 35347,
+        "feet_cut_z": 0.09
+      },
+      "decimate": {
+        "tris_before": 36481,
+        "ratio": 0.2467,
+        "flipped_after_decimate_fixed": 6,
+        "after": {
+          "verts": 4776,
+          "tris": 9000,
+          "parts": 18,
+          "boundary_edges": 412,
+          "nonmanifold_edges": 33,
+          "flipped_faces": 0
+        }
+      }
+    },
+    "Hair": {
+      "raw": {
+        "verts": 42842,
+        "tris": 73045,
+        "parts": 184,
+        "boundary_edges": 12363,
+        "nonmanifold_edges": 6,
+        "flipped_faces": 3484,
+        "size_m": [
+          0.643,
+          0.79,
+          1.001
+        ]
+      },
+      "clean": {
+        "raw": {
+          "verts": 42842,
+          "tris": 73045
+        },
+        "after_weld": {
+          "verts": 36514,
+          "tris": 73031,
+          "parts": 1,
+          "boundary_edges": 28,
+          "nonmanifold_edges": 16,
+          "flipped_faces": 7
+        },
+        "slit_verts_zipped": 7,
+        "small_parts_removed": 0,
+        "duplicate_faces_removed": 0,
+        "loose_verts_removed": 0,
+        "holes_filled": 0,
+        "after": {
+          "verts": 36507,
+          "tris": 73023,
+          "parts": 1,
+          "boundary_edges": 17,
+          "nonmanifold_edges": 11,
+          "flipped_faces": 4
+        }
+      },
+      "fit": {
+        "turn_deg": -2.7,
+        "scale": 0.302,
+        "mannequin_faces_removed": 17815,
+        "hair_faces": 55208
+      },
+      "decimate": {
+        "tris_before": 55208,
+        "ratio": 0.0725,
+        "flipped_after_decimate_fixed": 17,
+        "after": {
+          "verts": 2185,
+          "tris": 3999,
+          "parts": 13,
+          "boundary_edges": 405,
+          "nonmanifold_edges": 11,
+          "flipped_faces": 2
+        }
+      },
+      "clearance": {
+        "verts_pushed": 549,
+        "max_push_m": 0.0348
+      }
+    },
+    "Top": {
+      "raw": {
+        "verts": 28064,
+        "tris": 47603,
+        "parts": 184,
+        "boundary_edges": 8220,
+        "nonmanifold_edges": 3,
+        "flipped_faces": 22862,
+        "size_m": [
+          0.996,
+          0.409,
+          0.976
+        ]
+      },
+      "clean": {
+        "raw": {
+          "verts": 28064,
+          "tris": 47603
+        },
+        "after_weld": {
+          "verts": 23753,
+          "tris": 47586,
+          "parts": 1,
+          "boundary_edges": 38,
+          "nonmanifold_edges": 36,
+          "flipped_faces": 14
+        },
+        "slit_verts_zipped": 5,
+        "small_parts_removed": 0,
+        "duplicate_faces_removed": 0,
+        "loose_verts_removed": 0,
+        "holes_filled": 0,
+        "tears": {
+          "passes": 3,
+          "tears_closed": 25,
+          "bad_edges_left": 3
+        },
+        "dents_found": 7,
+        "fold_rims_skipped": 14,
+        "dents": {
+          "dents": 7,
+          "verts_in_zone": 1494,
+          "verts_lifted": 130
+        },
+        "after": {
+          "verts": 23695,
+          "tris": 47457,
+          "parts": 1,
+          "boundary_edges": 2,
+          "nonmanifold_edges": 1,
+          "flipped_faces": 0
+        }
+      },
+      "decimate": {
+        "tris_before": 47457,
+        "ratio": 0.1054,
+        "flipped_after_decimate_fixed": 0,
+        "after": {
+          "verts": 2466,
+          "tris": 4999,
+          "parts": 1,
+          "boundary_edges": 2,
+          "nonmanifold_edges": 1,
+          "flipped_faces": 0
+        }
+      },
+      "fit": {
+        "torso_half_width": 0.224,
+        "left": {
+          "sleeve_drop_deg": 30.4
+        },
+        "right": {
+          "sleeve_drop_deg": 30.1
+        },
+        "collar_z": 1.538,
+        "hem_z": 0.945,
+        "scale_xyz": [
+          0.739,
+          0.719,
+          0.609
+        ],
+        "sleeve_raise_m": 0.034,
+        "sleeve_end_x": 0.395
+      },
+      "clearance": {
+        "verts_pushed": 1162,
+        "max_push_m": 0.0465
+      }
+    },
+    "Bottom": {
+      "raw": {
+        "verts": 27069,
+        "tris": 47554,
+        "parts": 97,
+        "boundary_edges": 6424,
+        "nonmanifold_edges": 4,
+        "flipped_faces": 21095,
+        "size_m": [
+          0.872,
+          0.572,
+          1.002
+        ]
+      },
+      "clean": {
+        "raw": {
+          "verts": 27069,
+          "tris": 47554
+        },
+        "after_weld": {
+          "verts": 23773,
+          "tris": 47550,
+          "parts": 1,
+          "boundary_edges": 11,
+          "nonmanifold_edges": 10,
+          "flipped_faces": 0
+        },
+        "slit_verts_zipped": 0,
+        "small_parts_removed": 0,
+        "duplicate_faces_removed": 0,
+        "loose_verts_removed": 0,
+        "holes_filled": 0,
+        "tears": {
+          "passes": 3,
+          "tears_closed": 9,
+          "bad_edges_left": 0
+        },
+        "dents_found": 6,
+        "fold_rims_skipped": 0,
+        "dents": {
+          "dents": 6,
+          "verts_in_zone": 877,
+          "verts_lifted": 477
+        },
+        "after": {
+          "verts": 23755,
+          "tris": 47514,
+          "parts": 1,
+          "boundary_edges": 0,
+          "nonmanifold_edges": 0,
+          "flipped_faces": 0
+        }
+      },
+      "decimate": {
+        "tris_before": 47514,
+        "ratio": 0.0631,
+        "flipped_after_decimate_fixed": 0,
+        "after": {
+          "verts": 1497,
+          "tris": 2998,
+          "parts": 1,
+          "boundary_edges": 0,
+          "nonmanifold_edges": 0,
+          "flipped_faces": 0
+        }
+      },
+      "fit": {
+        "waist_z": 1.114,
+        "hem_z": 0.65,
+        "scale_xyz": [
+          0.47,
+          0.522,
+          0.465
+        ]
+      },
+      "clearance": {
+        "verts_pushed": 445,
+        "max_push_m": 0.0377
+      }
+    },
+    "Shoes": {
+      "raw": {
+        "verts": 37392,
+        "tris": 56360,
+        "parts": 835,
+        "boundary_edges": 17013,
+        "nonmanifold_edges": 24,
+        "flipped_faces": 24445,
+        "size_m": [
+          0.987,
+          0.998,
+          0.473
+        ]
+      },
+      "clean": {
+        "raw": {
+          "verts": 37392,
+          "tris": 56360
+        },
+        "after_weld": {
+          "verts": 28146,
+          "tris": 56261,
+          "parts": 33,
+          "boundary_edges": 190,
+          "nonmanifold_edges": 163,
+          "flipped_faces": 153
+        },
+        "slit_verts_zipped": 17,
+        "small_parts_removed": 31,
+        "duplicate_faces_removed": 0,
+        "loose_verts_removed": 0,
+        "holes_filled": 0,
+        "after": {
+          "verts": 27424,
+          "tris": 54950,
+          "parts": 2,
+          "boundary_edges": 154,
+          "nonmanifold_edges": 138,
+          "flipped_faces": 13
+        }
+      },
+      "decimate": {
+        "tris_before": 54950,
+        "ratio": 0.0546,
+        "flipped_after_decimate_fixed": 17,
+        "after": {
+          "verts": 1447,
+          "tris": 2999,
+          "parts": 2,
+          "boundary_edges": 151,
+          "nonmanifold_edges": 138,
+          "flipped_faces": 15
+        }
+      },
+      "fit": {
+        "Right": {
+          "scale": 0.301,
+          "turn_deg": -3.5,
+          "top_z": 0.142
+        },
+        "Left": {
+          "scale": 0.301,
+          "turn_deg": 2.8,
+          "top_z": 0.139
+        }
+      }
+    }
+  },
+  "body_spec": {
+    "scale": 1.8558,
+    "height_m": 1.78,
+    "bounds_min": [
+      -0.925,
+      -0.133,
+      0.0
+    ],
+    "facing": "-Y (Unity +Z)",
+    "transforms_applied": [
+      [
+        1.0,
+        1.0,
+        1.0
+      ],
+      [
+        1.0,
+        1.0,
+        1.0
+      ]
+    ]
+  },
+  "materials": {
+    "Body": {
+      "material": "M_TennisPlayer_Body",
+      "texture_size": 2048,
+      "gray_lining_recolored": 0.0,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.254,
+        0.263
+      ],
+      "mean_roughness": [
+        0.541,
+        0.541
+      ]
+    },
+    "Top": {
+      "material": "M_TennisPlayer_Top",
+      "texture_size": 2048,
+      "gray_lining_recolored": 0.145,
+      "dark_spots_lifted": 0.0013,
+      "saturation": [
+        0.186,
+        0.172
+      ],
+      "mean_roughness": [
+        0.706,
+        0.706
+      ]
+    },
+    "Bottom": {
+      "material": "M_TennisPlayer_Bottom",
+      "texture_size": 1024,
+      "gray_lining_recolored": 0.405,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.102,
+        0.081
+      ],
+      "mean_roughness": [
+        0.72,
+        0.72
+      ]
+    },
+    "Shoes": {
+      "material": "M_TennisPlayer_Shoes",
+      "texture_size": 1024,
+      "gray_lining_recolored": 0.0,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.178,
+        0.156
+      ],
+      "mean_roughness": [
+        0.634,
+        0.634
+      ]
+    },
+    "Hair": {
+      "material": "M_TennisPlayer_Hair",
+      "texture_size": 1024,
+      "gray_lining_recolored": 0.0,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.135,
+        0.156
+      ],
+      "mean_roughness": [
+        0.563,
+        0.563
+      ]
+    }
+  },
+  "animations": {
+    "Idle": {
+      "frames": [
+        0.0,
+        305.0
+      ],
+      "seconds": 10.2,
+      "loop_diff_deg": 0.0,
+      "loop_diff_m": 0.0,
+      "frames_after": [
+        0.0,
+        305.0
+      ]
+    },
+    "Walk": {
+      "frames": [
+        0.0,
+        136.0
+      ],
+      "seconds": 4.57,
+      "loop_diff_deg": 8.89,
+      "loop_diff_m": 0.0421,
+      "cycle_kept": "전체 (클립 안에 더 맞는 구간이 없음)",
+      "blended_last_frames": 6,
+      "loop_diff_after_deg": 0.0,
+      "loop_diff_after_m": 0.0,
+      "frames_after": [
+        0.0,
+        136.0
+      ]
+    },
+    "Run": {
+      "frames": [
+        0.0,
+        137.0
+      ],
+      "seconds": 4.6,
+      "loop_diff_deg": 12.83,
+      "loop_diff_m": 0.0651,
+      "cycle_kept": [
+        67,
+        91
+      ],
+      "cycle_seconds": 0.8,
+      "cycle_diff_deg": 7.3,
+      "cycle_diff_m": 0.047,
+      "blended_last_frames": 6,
+      "loop_diff_after_deg": 0.0,
+      "loop_diff_after_m": 0.0,
+      "frames_after": [
+        0.0,
+        24.0
+      ]
+    }
+  },
+  "parts_final": {
+    "TennisPlayer_Body": 9000,
+    "TennisPlayer_Top": 4999,
+    "TennisPlayer_Bottom": 2998,
+    "TennisPlayer_Shoes": 2999,
+    "TennisPlayer_Hair": 3999
+  },
+  "fbx_check": {
+    "file_mb": 2.2,
+    "meshes": {
+      "TennisPlayer_Body": 9000,
+      "TennisPlayer_Bottom": 2998,
+      "TennisPlayer_Hair": 3999,
+      "TennisPlayer_Shoes": 2997,
+      "TennisPlayer_Top": 4999
+    },
+    "tris_total": 23993,
+    "height_m": 1.801,
+    "bones": 23,
+    "fbx_takes": [
+      "Idle",
+      "Run",
+      "Walk"
+    ],
+    "materials": [
+      "M_TennisPlayer_Body",
+      "M_TennisPlayer_Bottom",
+      "M_TennisPlayer_Hair",
+      "M_TennisPlayer_Shoes",
+      "M_TennisPlayer_Top"
+    ]
+  }
+}

@@ -40,7 +40,6 @@ MonoBehaviour:
   smashIdealLateral: 0.4
   smashTempoBoost: 1.5
   swingWindup: 0.25
-  followThrough: 0.35
   takeBackLead: 0.9
   ballTimeScale: 0.8
   shotSpeedScale: 1
@@ -87,7 +86,7 @@ MonoBehaviour:
     sideSpin: 0
   volleyMinHeight: 0.2
   flatServe:
-    speed: 46
+    speed: 51
     shortSpeed: 0
     spin: 40
     minDepth: 0
@@ -118,7 +117,6 @@ MonoBehaviour:
   serveRetossHeight: 1
   serveDepthInset: 0.9
   serveAimInset: 0.5
-  secondServeSpeedScale: 0.85
   secondServeErrorScale: 0.6
   serveBaseError: 0.5
   serveErrorPerBad: 2.5

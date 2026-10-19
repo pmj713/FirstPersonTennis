@@ -48,17 +48,22 @@ namespace FirstPersonTennis
             SurfaceChanged?.Invoke();
         }
 
-        // 바닥에 따른 가감속 (m/s²): 지금 속도를 줄이는 쪽이면 제동 배율, 아니면 출발 배율
-        public static float MoveRate(Vector3 velocity, Vector3 target, float acceleration)
+        // 바닥에 따른 가감속 (m/s²): 지금 속도를 줄이는 쪽이면 제동 배율, 아니면 출발 배율.
+        // slideScale은 선수의 속도 스탯(PlayerStats.SlideScale): 미끄러운 바닥에서 잃는 제동을 이만큼만 잃는다
+        public static float MoveRate(Vector3 velocity, Vector3 target, float acceleration, float slideScale = 1f)
         {
             bool slowing = Vector3.Dot(target - velocity, velocity) < 0f;
-            float grip = slowing ? Surface.braking : Surface.traction;
-            return acceleration * (grip > 0f ? grip : 1f);
+            if (slowing) return BrakeRate(acceleration, slideScale);
+            return acceleration * (Surface.traction > 0f ? Surface.traction : 1f);
         }
 
         // 바닥에서 낼 수 있는 제동 (m/s²)
-        public static float BrakeRate(float acceleration) =>
-            acceleration * (Surface.braking > 0f ? Surface.braking : 1f);
+        public static float BrakeRate(float acceleration, float slideScale = 1f)
+        {
+            float braking = Surface.braking > 0f ? Surface.braking : 1f;
+            if (braking < 1f) braking = 1f - (1f - braking) * slideScale;
+            return acceleration * braking;
+        }
 
         public static float NetHeightAt(float x) =>
             Mathf.Lerp(NetCenterHeight, NetPostHeight, Mathf.Clamp01(Mathf.Abs(x) / NetPostX));

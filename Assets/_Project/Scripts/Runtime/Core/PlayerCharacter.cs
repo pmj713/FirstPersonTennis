@@ -31,7 +31,7 @@ namespace FirstPersonTennis
             new CharacterPreset { name = "균형형", description = "입문용, 약점 없음" },
             new CharacterPreset
             {
-                name = "공격형", description = "강한 서브·스트로크, 아웃 많음, 잔디 유리", power = 80, technique = 40, speed = 30,
+                name = "공격형", description = "강한 서브·스트로크, 발이 느림, 잔디 유리", power = 80, technique = 40, speed = 30,
                 sliceTendency = 0.8f, lobTendency = 0.8f, dropShotTendency = 0.8f, flatServeBias = 0.1f,
             },
             new CharacterPreset
@@ -41,7 +41,7 @@ namespace FirstPersonTennis
             },
             new CharacterPreset
             {
-                name = "수비형", description = "넓은 수비, 클레이 유리", power = 40, technique = 50, speed = 80, // 합 170: 밸런스로 보강
+                name = "수비형", description = "넓은 수비, 클레이 유리", power = 30, technique = 40, speed = 80,
                 sliceTendency = 1.1f, lobTendency = 1.1f, dropShotTendency = 0.8f, flatServeBias = -0.1f,
             },
         };
@@ -53,24 +53,24 @@ namespace FirstPersonTennis
     {
         [Tooltip("힘 100일 때 스트로크·서브·스매시 속도 증가 (비율)")]
         public float powerSpeedAtMax;
-        [Tooltip("힘으로 빨라진 만큼 더해지는 타구 품질 벌점 (속도 +100%일 때). 강하게 칠수록 범실이 늘어난다")]
-        public float powerRisk;
         [Tooltip("기술 100일 때 타구 오차 감소 (비율)")]
         public float techniqueErrorAtMax;
         [Tooltip("기술 100일 때 사이드라인 여유(aimMargin)를 줄이는 비율. 높을수록 라인 가까이 노린다")]
         public float techniqueAimMarginAtMax;
         [Tooltip("기술 100일 때 스핀 증가 (비율)")]
         public float techniqueSpinAtMax;
-        [Tooltip("속도 100일 때 걷기·달리기 속도 증가 (비율). 위치 선정에 바로 영향을 주므로 가장 작게 둔다")]
+        [Tooltip("속도 100일 때 걷기·달리기 속도 증가 (비율). 좌우로 흔드는 공을 따라가는 힘이 이 차이에서 나온다")]
         public float speedMoveAtMax;
         [Tooltip("속도 100일 때 스테미너 회복 증가 (비율)")]
         public float speedRecoveryAtMax;
+        [Tooltip("속도 100일 때 미끄러운 바닥(클레이·잔디)에서 멈출 때 덜 미끄러지는 비율. 잘 움직이는 선수는 슬라이딩도 잘한다")]
+        public float speedSlideAtMax;
 
         public static StatTuning Default => new StatTuning
         {
-            powerSpeedAtMax = 0.065f, powerRisk = 4f,
+            powerSpeedAtMax = 0.05f,
             techniqueErrorAtMax = 0.4f, techniqueSpinAtMax = 0.25f, techniqueAimMarginAtMax = 0.8f,
-            speedMoveAtMax = 0.06f, speedRecoveryAtMax = 0.25f,
+            speedMoveAtMax = 0.1f, speedRecoveryAtMax = 0.25f, speedSlideAtMax = 0.5f,
         };
     }
 
@@ -78,16 +78,17 @@ namespace FirstPersonTennis
     public struct PlayerStats
     {
         public float PowerScale;    // 샷 속도
-        public float PowerRisk;     // 타구 품질 벌점
         public float ErrorScale;    // 타구 오차
         public float SpinScale;     // 스핀
         public float AimMarginScale; // 사이드라인 여유 (작을수록 라인 가까이)
         public float MoveScale;     // 걷기·달리기 속도
         public float RecoveryScale; // 스테미너 회복
+        public float SlideScale;    // 미끄러운 바닥에서 멈출 때 잃는 제동 (작을수록 덜 미끄러짐)
 
         public static PlayerStats Neutral => new PlayerStats
         {
             PowerScale = 1f, ErrorScale = 1f, SpinScale = 1f, AimMarginScale = 1f, MoveScale = 1f, RecoveryScale = 1f,
+            SlideScale = 1f,
         };
 
         public static PlayerStats From(CharacterPreset c, StatTuning t)
@@ -96,16 +97,15 @@ namespace FirstPersonTennis
             // -1 (스탯 0) ~ 0 (기준 50) ~ +1 (스탯 100)
             float Level(int stat) => (Mathf.Clamp(stat, 0, CharacterPreset.MaxStat) - CharacterPreset.BaseStat) /
                                      (float)(CharacterPreset.MaxStat - CharacterPreset.BaseStat);
-            float power = 1f + Level(c.power) * t.powerSpeedAtMax;
             return new PlayerStats
             {
-                PowerScale = power,
-                PowerRisk = Mathf.Max(0f, power - 1f) * t.powerRisk,
+                PowerScale = 1f + Level(c.power) * t.powerSpeedAtMax,
                 ErrorScale = Mathf.Max(0.1f, 1f - Level(c.technique) * t.techniqueErrorAtMax),
                 SpinScale = Mathf.Max(0.1f, 1f + Level(c.technique) * t.techniqueSpinAtMax),
                 AimMarginScale = Mathf.Max(0.1f, 1f - Level(c.technique) * t.techniqueAimMarginAtMax),
                 MoveScale = Mathf.Max(0.1f, 1f + Level(c.speed) * t.speedMoveAtMax),
                 RecoveryScale = Mathf.Max(0.1f, 1f + Level(c.speed) * t.speedRecoveryAtMax),
+                SlideScale = Mathf.Max(0f, 1f - Level(c.speed) * t.speedSlideAtMax),
             };
         }
     }

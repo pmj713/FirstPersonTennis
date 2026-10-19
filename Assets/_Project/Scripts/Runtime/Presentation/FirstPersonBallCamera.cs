@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
 
 namespace FirstPersonTennis
 {
@@ -12,6 +13,7 @@ namespace FirstPersonTennis
         [SerializeField] TennisConfig config;
         [SerializeField] PlayerMovement player;
         [SerializeField] TennisBall ball;
+        [Tooltip("1인칭에서 안 보이게 할 내 몸 (그림자는 남긴다)")]
         [SerializeField] Renderer[] hideInFirstPerson;
         [SerializeField] float maxTurnSpeed = 300f;
         [SerializeField] float turnSharpness = 10f;
@@ -84,7 +86,7 @@ namespace FirstPersonTennis
         void ApplyVisibility()
         {
             foreach (Renderer r in hideInFirstPerson)
-                if (r != null) r.enabled = ThirdPerson;
+                if (r != null) r.shadowCastingMode = ThirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
         }
     }
 }

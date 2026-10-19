@@ -1,0 +1,253 @@
+{
+  "before": {
+    "verts": 47340,
+    "tris": 78017,
+    "parts": 326,
+    "boundary_edges": 16163,
+    "nonmanifold_edges": 34,
+    "height_m": 0.9945,
+    "bounds_min": [
+      -0.4844,
+      -0.0949,
+      -0.0
+    ],
+    "bounds_max": [
+      0.4844,
+      0.0949,
+      0.9945
+    ],
+    "bones": 23,
+    "material_double_sided": true
+  },
+  "animations_imported": {
+    "Idle": [
+      0.0,
+      305.0
+    ],
+    "Walk": [
+      0.0,
+      136.0
+    ],
+    "Run": [
+      0.0,
+      137.0
+    ]
+  },
+  "cleanup": {
+    "verts_before": 47340,
+    "verts_after_weld": 39015,
+    "found_after_weld": {
+      "parts": 1,
+      "boundary_edges": 137,
+      "nonmanifold_edges": 70,
+      "flipped_faces": 40
+    },
+    "slit_verts_zipped": 70,
+    "duplicate_faces_removed": 0,
+    "loose_verts_removed": 1,
+    "holes_filled": 0,
+    "flipped_faces_fixed": 6,
+    "after": {
+      "verts": 38944,
+      "tris": 77887,
+      "parts": 1,
+      "boundary_edges": 25,
+      "nonmanifold_edges": 17
+    }
+  },
+  "decimate": {
+    "ratio": 0.2568,
+    "tris_before": 77887,
+    "after": {
+      "verts": 10000,
+      "tris": 19999,
+      "parts": 1,
+      "boundary_edges": 25,
+      "nonmanifold_edges": 17
+    }
+  },
+  "game_spec": {
+    "height_before_m": 0.9946,
+    "scale": 1.8098,
+    "origin_moved_by_m": [
+      0.0001,
+      -0.0036,
+      -0.0001
+    ],
+    "height_after_m": 1.8,
+    "bounds_min": [
+      -0.8771,
+      -0.1652,
+      0.0
+    ],
+    "bounds_max": [
+      0.8764,
+      0.1778,
+      1.8
+    ],
+    "facing": "-Y (Blender 정면 = Unity +Z)",
+    "armature_transform": {
+      "loc": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "body_transform": {
+      "loc": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rot": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "animations": {
+    "Idle": {
+      "frames": [
+        0.0,
+        305.0
+      ],
+      "seconds": 10.2,
+      "loop_diff_deg": 0.0,
+      "loop_diff_m": 0.0,
+      "frames_after": [
+        0.0,
+        305.0
+      ],
+      "lowest_point_m": 0.001
+    },
+    "Walk": {
+      "frames": [
+        0.0,
+        136.0
+      ],
+      "seconds": 4.57,
+      "loop_diff_deg": 8.89,
+      "loop_diff_m": 0.0334,
+      "cycle_kept": "전체 (클립 안에 더 맞는 구간이 없음)",
+      "blended_last_frames": 6,
+      "loop_diff_after_deg": 0.0,
+      "loop_diff_after_m": 0.0,
+      "frames_after": [
+        0.0,
+        136.0
+      ],
+      "lowest_point_m": 0.0
+    },
+    "Run": {
+      "frames": [
+        0.0,
+        137.0
+      ],
+      "seconds": 4.6,
+      "loop_diff_deg": 12.83,
+      "loop_diff_m": 0.063,
+      "cycle_kept": [
+        67,
+        91
+      ],
+      "cycle_seconds": 0.8,
+      "cycle_diff_deg": 7.3,
+      "cycle_diff_m": 0.045,
+      "blended_last_frames": 6,
+      "loop_diff_after_deg": 0.0,
+      "loop_diff_after_m": 0.0,
+      "frames_after": [
+        0.0,
+        24.0
+      ],
+      "lowest_point_m": 0.021
+    }
+  },
+  "material": {
+    "name": "M_TennisPlayer",
+    "double_sided_before": true,
+    "double_sided_after": false,
+    "texture_size": [
+      2048,
+      2048
+    ],
+    "base_mean_luminance": [
+      0.448,
+      0.449
+    ],
+    "base_mean_saturation": [
+      0.259,
+      0.235
+    ],
+    "mean_roughness": [
+      0.585,
+      0.585
+    ],
+    "tone": {
+      "SATURATION": 0.9,
+      "CONTRAST": 1.04,
+      "WARMTH": 0.015,
+      "BRIGHTNESS": 1.0,
+      "ROUGHNESS_MIN": 0.45
+    },
+    "unity_maps": [
+      "TennisPlayer_BaseColor",
+      "TennisPlayer_Normal",
+      "TennisPlayer_MetallicSmoothness",
+      "TennisPlayer_Occlusion"
+    ]
+  },
+  "fbx_check": {
+    "file_mb": 1.9,
+    "objects": [
+      "TennisPlayer_Body",
+      "TennisPlayer_Rig"
+    ],
+    "bones": 23,
+    "tris": 19999,
+    "height_m": 1.8,
+    "bounds_min": [
+      -0.877,
+      -0.165,
+      0.0
+    ],
+    "actions": {
+      "TennisPlayer_Rig|Idle": [
+        1.0,
+        306.0
+      ],
+      "TennisPlayer_Rig|Run": [
+        1.0,
+        25.0
+      ],
+      "TennisPlayer_Rig|Walk": [
+        1.0,
+        137.0
+      ]
+    },
+    "fbx_takes": [
+      "Idle",
+      "Run",
+      "Walk"
+    ],
+    "materials": [
+      "M_TennisPlayer"
+    ]
+  }
+}

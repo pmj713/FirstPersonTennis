@@ -121,6 +121,14 @@ namespace FirstPersonTennis.Tests
                 yield return BalanceReport(court, "수비형");
         }
 
+        // 공격형이 들어간 3개 조합만 하드·클레이·잔디에서 이어서 잰다 (약 22분). 힘 효과를 바꿀 때
+        [UnityTest, Explicit("선수 밸런스 측정은 오래 걸려 따로 돌린다"), Timeout(4 * 60 * 60 * 1000)]
+        public IEnumerator AttackTypeBalanceAllCourts()
+        {
+            foreach (CourtType court in new[] { CourtType.Hard, CourtType.Clay, CourtType.Grass })
+                yield return BalanceReport(court, "공격형");
+        }
+
         // 조합마다 자리를 바꿔 두 번 재고(각 PointsPerSide 포인트), 끝나는 대로 바로 로그를 남긴다 (중간에 멈춰도 결과가 남음).
         // 순서는 라운드 로빈이라 앞쪽 절반만 재도 모든 선수가 한 번씩 나온다. focus가 있으면 그 선수가 들어간 조합만 잰다.
         IEnumerator BalanceReport(CourtType court, string focus = null)

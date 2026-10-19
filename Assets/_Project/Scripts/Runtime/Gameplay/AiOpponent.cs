@@ -170,9 +170,9 @@ namespace FirstPersonTennis
             to.y = 0f;
             float distance = to.magnitude;
             // 미끄러운 바닥에서는 멈추는 데 걸리는 거리만큼 일찍 속도를 줄인다
-            float stopSpeed = Mathf.Sqrt(2f * Court.BrakeRate(profile.acceleration) * distance);
+            float stopSpeed = Mathf.Sqrt(2f * Court.BrakeRate(profile.acceleration, stats.SlideScale) * distance);
             Vector3 desired = distance > 0.02f ? to / distance * Mathf.Min(maxSpeed, distance * 6f, stopSpeed) : Vector3.zero;
-            Velocity = Vector3.MoveTowards(Velocity, desired, Court.MoveRate(Velocity, desired, profile.acceleration) * dt);
+            Velocity = Vector3.MoveTowards(Velocity, desired, Court.MoveRate(Velocity, desired, profile.acceleration, stats.SlideScale) * dt);
 
             Vector3 p = transform.position + Velocity * dt;
             p.x = Mathf.Clamp(p.x, -Court.PlayableHalfWidth, Court.PlayableHalfWidth);

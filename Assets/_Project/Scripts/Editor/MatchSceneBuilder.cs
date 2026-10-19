@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -18,6 +19,8 @@ namespace FirstPersonTennis.EditorTools
         public const string ScenePath = Root + "/Scenes/Match.unity";
         const string ConfigPath = Root + "/Settings/TennisConfig.asset";
         const string MaterialDir = Root + "/Materials";
+        const string BallModelPath = Root + "/Art/Props/TennisBall/TennisBall.fbx";
+        const string RacketModelPath = Root + "/Art/Props/TennisRacket/TennisRacket.fbx";
 
         [MenuItem("FirstPersonTennis/Build Match Scene")]
         public static void BuildFromMenu()
@@ -37,6 +40,8 @@ namespace FirstPersonTennis.EditorTools
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             TennisConfig config = LoadOrCreateConfig();
             var m = new Materials();
+            AthleteModel.Configure();
+            AnimatorController athleteController = AthleteModel.MatchController();
             SetupLighting();
 
             // 코트는 Play를 누를 때 설정 크기로 다시 만들어진다. 여기서는 에디터에서 보이도록 한 번 만들어 둔다.
@@ -52,16 +57,14 @@ namespace FirstPersonTennis.EditorTools
             TennisBall ball = CreateBall(m, config, out GameObject halo);
 
             // 플레이어 (근거리, side -1)
-            Transform playerRoot = CreateAthlete("Player", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f, m.Player, m,
-                out Renderer playerBody, out Transform playerPivot);
+            Transform playerRoot = CreateAthlete("Player", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f, m.Player,
+                athleteController, out Renderer[] playerBody, out AthleteAnimator playerRacket);
             var movement = playerRoot.gameObject.AddComponent<PlayerMovement>();
-            var playerRacket = playerRoot.gameObject.AddComponent<RacketSwingVisual>();
             var gesture = playerRoot.gameObject.AddComponent<ShotGestureInput>();
             var playerSwing = playerRoot.gameObject.AddComponent<AutoSwing>();
             var playerServe = playerRoot.gameObject.AddComponent<PlayerServe>(); // 같은 오브젝트에 있어야 제스처가 서브로 넘긴다
             Set(movement, "config", config);
             SetInt(movement, "side", -1);
-            Set(playerRacket, "pivot", playerPivot);
             Set(gesture, "ball", ball);
             Set(gesture, "swing", playerSwing);
             WireSwing(playerSwing, config, ball, -1, playerRacket, gesture, 1f, 11);
@@ -71,12 +74,10 @@ namespace FirstPersonTennis.EditorTools
             Set(playerServe, "movement", movement);
 
             // AI 상대 (원거리, side +1). 오차 배율은 경기 시작 때 난이도로 다시 정한다.
-            Transform aiRoot = CreateAthlete("Opponent", new Vector3(0f, 0f, Court.HalfLength + 0.8f), 180f, m.Opponent, m,
-                out _, out Transform aiPivot);
-            var aiRacket = aiRoot.gameObject.AddComponent<RacketSwingVisual>();
+            Transform aiRoot = CreateAthlete("Opponent", new Vector3(0f, 0f, Court.HalfLength + 0.8f), 180f, m.Opponent,
+                athleteController, out _, out AthleteAnimator aiRacket);
             var ai = aiRoot.gameObject.AddComponent<AiOpponent>();
             var aiSwing = aiRoot.gameObject.AddComponent<AutoSwing>();
-            Set(aiRacket, "pivot", aiPivot);
             Set(ai, "config", config);
             Set(ai, "ball", ball);
             Set(ai, "swing", aiSwing);
@@ -85,11 +86,9 @@ namespace FirstPersonTennis.EditorTools
 
             // 관전용 AI (가까운 쪽, side -1). AI 대결 관전과 선수 밸런스 측정 때만 켠다.
             Transform nearRoot = CreateAthlete("NearOpponent", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f,
-                m.NearOpponent, m, out _, out Transform nearPivot);
-            var nearRacket = nearRoot.gameObject.AddComponent<RacketSwingVisual>();
+                m.NearOpponent, athleteController, out _, out AthleteAnimator nearRacket);
             var nearAi = nearRoot.gameObject.AddComponent<AiOpponent>();
             var nearSwing = nearRoot.gameObject.AddComponent<AutoSwing>();
-            Set(nearRacket, "pivot", nearPivot);
             Set(nearAi, "config", config);
             Set(nearAi, "ball", ball);
             Set(nearAi, "swing", nearSwing);
@@ -123,7 +122,7 @@ namespace FirstPersonTennis.EditorTools
             Set(cameraRig, "config", config);
             Set(cameraRig, "player", movement);
             Set(cameraRig, "ball", ball);
-            SetArray(cameraRig, "hideInFirstPerson", new Object[] { playerBody });
+            SetArray(cameraRig, "hideInFirstPerson", playerBody.Cast<Object>().ToArray());
             var audioSource = camGo.AddComponent<AudioSource>();
             audioSource.playOnAwake = false;
             var audio = camGo.AddComponent<AudioFeedback>();
@@ -167,7 +166,7 @@ namespace FirstPersonTennis.EditorTools
         }
 
         static void WireSwing(AutoSwing swing, TennisConfig config, TennisBall ball, int side,
-            RacketSwingVisual racket, MonoBehaviour source, float errorScale, int seed)
+            AthleteAnimator racket, MonoBehaviour source, float errorScale, int seed)
         {
             Set(swing, "config", config);
             Set(swing, "ball", ball);
@@ -196,10 +195,19 @@ namespace FirstPersonTennis.EditorTools
 
         static TennisBall CreateBall(Materials m, TennisConfig config, out GameObject halo)
         {
-            Transform ball = Primitive(PrimitiveType.Sphere, "Ball", null, m.Ball);
+            // 공 오브젝트의 스케일 = 설정의 공 지름 (TennisBall이 맞춘다). 모델은 지름 1로 맞춰 자식으로 단다
+            var ball = new GameObject("Ball").transform;
             ball.position = new Vector3(0f, 1f, Court.HalfLength);
             ball.localScale = Vector3.one * (BallPhysics.Radius * 2f);
-            ball.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+
+            GameObject visual = InstantiateModel(BallModelPath, out Bounds bounds);
+            visual.name = "Visual";
+            visual.transform.SetParent(ball, false);
+            float size = bounds.size.x; // 모델 지름 (실제 공 0.067m)
+            visual.transform.localScale /= size; // 모델 루트의 임포트 스케일은 살린다
+            visual.transform.localPosition = -bounds.center / size;
+            foreach (Renderer r in visual.GetComponentsInChildren<Renderer>())
+                r.shadowCastingMode = ShadowCastingMode.Off; // 그림자는 BallShadow가 따로 그린다
 
             Transform haloT = Primitive(PrimitiveType.Sphere, "Halo", ball, m.Halo);
             haloT.localScale = Vector3.one * 1.9f;
@@ -209,36 +217,78 @@ namespace FirstPersonTennis.EditorTools
 
             var component = ball.gameObject.AddComponent<TennisBall>();
             Set(component, "config", config);
+            Set(visual.AddComponent<BallSpinVisual>(), "ball", component);
             return component;
         }
 
-        static Transform CreateAthlete(string name, Vector3 position, float yaw, Material bodyMaterial, Materials m,
-            out Renderer body, out Transform racketPivot)
+        // FBX 모델을 씬에 놓는다: Blender 축(Z 위)을 메시에 구워 루트 회전 없이, 크기 1로. bounds = 모델 자체 크기
+        static GameObject InstantiateModel(string path, out Bounds bounds)
+        {
+            var importer = AssetImporter.GetAtPath(path) as ModelImporter;
+            if (importer == null) throw new InvalidOperationException($"모델이 없음: {path}");
+            if (!importer.bakeAxisConversion || importer.importAnimation)
+            {
+                importer.bakeAxisConversion = true;
+                importer.importAnimation = false;
+                importer.animationType = ModelImporterAnimationType.None;
+                importer.SaveAndReimport();
+            }
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(path));
+            Renderer[] renderers = go.GetComponentsInChildren<Renderer>();
+            bounds = renderers[0].bounds;
+            foreach (Renderer r in renderers) bounds.Encapsulate(r.bounds);
+            return go;
+        }
+
+        // 선수: 루트(네트를 봄, 이동·타격 컴포넌트) 아래 캐릭터 모델. 상의 색으로 선수를 구분한다.
+        // body: 1인칭에서 숨길 몸 메시 (라켓은 1인칭에서도 보인다)
+        static Transform CreateAthlete(string name, Vector3 position, float yaw, Material shirt,
+            RuntimeAnimatorController controller, out Renderer[] body, out AthleteAnimator animation)
         {
             var root = new GameObject(name).transform;
             root.position = position;
             root.rotation = Quaternion.Euler(0f, yaw, 0f);
 
-            Transform capsule = Primitive(PrimitiveType.Capsule, "Body", root, bodyMaterial);
-            capsule.localPosition = new Vector3(0f, 0.9f, 0f);
-            capsule.localScale = new Vector3(0.6f, 0.9f, 0.6f);
-            body = capsule.GetComponent<Renderer>();
+            var model = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(AthleteModel.FbxPath));
+            model.name = "Model";
+            model.transform.SetParent(root, false);
+            model.transform.localRotation = Quaternion.Euler(0f, 180f, 0f); // FBX 축 변환 뒤 모델은 -Z를 본다 → 루트 앞(+Z)으로
+            Animator animator = model.GetComponent<Animator>();
+            if (animator == null) animator = model.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+            animator.applyRootMotion = false;
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
-            racketPivot = new GameObject("RacketPivot").transform;
-            racketPivot.SetParent(root, false);
-            racketPivot.localPosition = new Vector3(0.22f, 1.25f, 0.1f);
+            body = model.GetComponentsInChildren<SkinnedMeshRenderer>().Cast<Renderer>().ToArray();
+            foreach (Renderer r in body)
+                if (r.name.EndsWith("_Top")) r.sharedMaterials = Enumerable.Repeat(shirt, r.sharedMaterials.Length).ToArray();
 
-            Transform handle = Primitive(PrimitiveType.Cylinder, "Handle", racketPivot, m.Racket);
-            handle.localPosition = new Vector3(0.15f, 0f, 0f);
-            handle.localRotation = Quaternion.Euler(0f, 0f, 90f);
-            handle.localScale = new Vector3(0.03f, 0.13f, 0.03f);
+            Transform racket = AttachRacket(model.transform);
 
-            Transform head = Primitive(PrimitiveType.Cylinder, "Head", racketPivot, m.RacketHead);
-            head.localPosition = new Vector3(0.44f, 0f, 0f);
-            head.localRotation = Quaternion.Euler(90f, 0f, 0f);
-            head.localScale = new Vector3(0.32f, 0.006f, 0.26f);
-
+            animation = root.gameObject.AddComponent<AthleteAnimator>();
+            Set(animation, "animator", animator);
+            Set(animation, "model", model.transform);
+            Set(animation, "hands", body.First(r => r.name.EndsWith("_Body")));
+            Set(animation, "racket", racket);
             return root;
+        }
+
+        // 라켓을 오른손에: FBX의 표식 세 점(손잡이 끝, 샤프트 쪽, 타구면 쪽)으로 방향을 잡는다.
+        // 라켓 모델은 루트 기준 긴 축 +Y, 타구면 ±Z, 원점 = 손잡이 끝
+        static Transform AttachRacket(Transform model)
+        {
+            Transform Marker(string marker) => model.GetComponentsInChildren<Transform>().FirstOrDefault(t => t.name == marker)
+                ?? throw new InvalidOperationException($"선수 모델에 {marker}가 없음 (tennis_animations.py로 다시 내보내야 한다)");
+            Transform socket = Marker("RacketSocket");
+            Vector3 shaft = Marker("RacketTip").position - socket.position;
+            Vector3 face = Marker("RacketFace").position - socket.position;
+
+            var holder = new GameObject("Racket").transform;
+            holder.SetPositionAndRotation(socket.position, Quaternion.LookRotation(face, shaft));
+            GameObject racket = InstantiateModel(RacketModelPath, out _);
+            racket.transform.SetParent(holder, false); // 루트의 축 변환 회전은 그대로
+            holder.SetParent(socket, true);
+            return holder;
         }
 
         static Transform CreateRing(string name, float inner, float outer, Material material)
@@ -272,12 +322,9 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material CourtSurface = Lit("HardCourt", new Color(0.13f, 0.32f, 0.58f));
             public readonly Material Line = Lit("Line", new Color(0.95f, 0.95f, 0.95f));
             public readonly Material Post = Lit("NetPost", new Color(0.2f, 0.22f, 0.2f));
-            public readonly Material Ball = Lit("Ball", new Color(0.85f, 0.95f, 0.15f), 0.25f);
             public readonly Material Player = Lit("Player", new Color(0.2f, 0.45f, 0.9f));
             public readonly Material Opponent = Lit("Opponent", new Color(0.85f, 0.25f, 0.2f));
             public readonly Material NearOpponent = Lit("NearOpponent", new Color(0.95f, 0.75f, 0.2f));
-            public readonly Material Racket = Lit("Racket", new Color(0.12f, 0.12f, 0.14f));
-            public readonly Material RacketHead = Lit("RacketHead", new Color(0.85f, 0.85f, 0.8f));
             public readonly Material Net = Transparent("Net", new Color(0.05f, 0.05f, 0.05f, 0.55f), true);
             public readonly Material Shadow = Transparent("BallShadow", new Color(0f, 0f, 0f, 0.55f));
             public readonly Material Marker = Transparent("LandingMarker", new Color(1f, 0.85f, 0.1f, 0.85f));

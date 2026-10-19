@@ -89,6 +89,33 @@ namespace FirstPersonTennis.Tests
             }
         }
 
+        // 속도 스탯이 높으면 클레이에서 덜 미끄러진다. 하드는 미끄러지지 않으니 그대로다
+        [Test]
+        public void FastPlayersSlideLessOnClay()
+        {
+            var moving = new Vector3(0f, 0f, 5f);
+            try
+            {
+                Court.SetSurface(CourtType.Clay, SurfaceProfile.Clay);
+                float normal = Court.MoveRate(moving, Vector3.zero, 30f);
+                float fast = Court.MoveRate(moving, Vector3.zero, 30f, 0.5f);
+                float slow = Court.MoveRate(moving, Vector3.zero, 30f, 1.2f);
+                Assert.Greater(fast, normal);
+                Assert.Less(fast, 30f, "클레이에서는 빨라도 하드보다 미끄럽다");
+                Assert.Less(slow, normal);
+                Assert.AreEqual(fast, Court.BrakeRate(30f, 0.5f), 1e-4f);
+                Assert.AreEqual(Court.MoveRate(Vector3.zero, moving, 30f), Court.MoveRate(Vector3.zero, moving, 30f, 0.5f), 1e-4f, "출발은 그대로");
+
+                Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);
+                Assert.AreEqual(30f, Court.MoveRate(moving, Vector3.zero, 30f, 0.5f), 1e-4f);
+                Assert.AreEqual(30f, Court.MoveRate(moving, Vector3.zero, 30f, 1.2f), 1e-4f);
+            }
+            finally
+            {
+                Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);
+            }
+        }
+
         // 값이 비어 있는 바닥(0)은 하드처럼 동작한다: 공이 멈추거나 선수가 못 움직이지 않는다
         [Test]
         public void UnsetSurfaceValuesFallBackToNeutral()

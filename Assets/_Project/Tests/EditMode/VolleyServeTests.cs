@@ -40,7 +40,7 @@ namespace FirstPersonTennis.Tests
             Assert.Greater(s.z * server, Court.HalfLength, "서버는 베이스라인 뒤");
         }
 
-        // 이상적 높이에서 친 모든 서브(구질 × 코너 × 코트 × 첫/두 번째)가 오차 없이 박스에 들어간다
+        // 이상적 높이에서 친 모든 서브(구질 × 코너 × 코트)가 오차 없이 박스에 들어간다
         [Test]
         public void EveryPlannedServeLandsInTheBox()
         {
@@ -50,12 +50,11 @@ namespace FirstPersonTennis.Tests
             foreach (bool deuce in new[] { true, false })
             foreach (ServeType type in new[] { ServeType.Flat, ServeType.Slice, ServeType.Kick })
             foreach (float aim in new[] { -1f, 0f, 1f })
-            foreach (bool second in new[] { false, true })
             {
                 Vector3 contact = Court.ServePosition(server, deuce, 0.6f) +
                                   new Vector3(0.35f * Court.Facing(server), config.serveIdealHeight, 0.3f * Court.Facing(server));
-                ShotSolution s = ShotPlanner.PlanServe(config, type, aim, contact, server, deuce, second);
-                string label = $"server {server} deuce {deuce} {type} aim {aim} second {second}";
+                ShotSolution s = ShotPlanner.PlanServe(config, type, aim, contact, server, deuce);
+                string label = $"server {server} deuce {deuce} {type} aim {aim}";
                 Assert.IsTrue(s.Success, label);
 
                 var state = new BallState(contact, s.Velocity, s.Spin);
@@ -76,20 +75,20 @@ namespace FirstPersonTennis.Tests
                 Assert.IsTrue(Court.IsInServiceBox(bounce, -server, deuce), $"{label} → {bounce}");
                 checkedCount++;
             }
-            Assert.AreEqual(72, checkedCount);
+            Assert.AreEqual(36, checkedCount);
             TestConfig.Destroy(config);
         }
 
+        // 플랫이 가장 빠르고, 머리 위 스매시(설정 속도 × 시간 배율)와 화면 빠르기가 같다. 계산기가 속도를 깎지 않아야 한다
         [Test]
-        public void FlatServeIsFastestAndSecondServeIsSlower()
+        public void FlatServeIsFastestAndAsFastAsSmash()
         {
             TennisConfig config = TestConfig.Create();
             var contact = new Vector3(0.9f, config.serveIdealHeight, -12.2f);
-            float Speed(ServeType type, bool second) =>
-                ShotPlanner.PlanServe(config, type, 0f, contact, -1, true, second).Velocity.magnitude;
-            Assert.Greater(Speed(ServeType.Flat, false), Speed(ServeType.Slice, false));
-            Assert.Greater(Speed(ServeType.Slice, false), Speed(ServeType.Kick, false));
-            Assert.Greater(Speed(ServeType.Flat, false), Speed(ServeType.Flat, true));
+            float Speed(ServeType type) => ShotPlanner.PlanServe(config, type, 0f, contact, -1, true).Velocity.magnitude;
+            Assert.Greater(Speed(ServeType.Flat), Speed(ServeType.Slice));
+            Assert.Greater(Speed(ServeType.Slice), Speed(ServeType.Kick));
+            Assert.AreEqual(config.smash.speed * config.smashTempoBoost, Speed(ServeType.Flat), 0.5f);
             TestConfig.Destroy(config);
         }
 

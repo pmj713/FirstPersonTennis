@@ -1,0 +1,272 @@
+{
+  "TennisBall": {
+    "raw": {
+      "verts": 12851,
+      "tris": 23173,
+      "parts": 49,
+      "boundary_edges": 2443,
+      "nonmanifold_edges": 2,
+      "flipped_faces": 1245,
+      "size_m": [
+        0.997,
+        0.999,
+        0.997
+      ],
+      "origin_offset_m": [
+        0.001,
+        0.0,
+        0.001
+      ]
+    },
+    "clean": {
+      "raw": {
+        "verts": 12851,
+        "tris": 23173
+      },
+      "after_weld": {
+        "verts": 11590,
+        "tris": 23168,
+        "parts": 3,
+        "boundary_edges": 12,
+        "nonmanifold_edges": 9,
+        "flipped_faces": 3
+      },
+      "slit_verts_zipped": 0,
+      "small_parts_removed": 2,
+      "duplicate_faces_removed": 0,
+      "loose_verts_removed": 0,
+      "holes_filled": 0,
+      "tears": {
+        "passes": 2,
+        "tears_closed": 6,
+        "bad_edges_left": 2
+      },
+      "after": {
+        "verts": 11504,
+        "tris": 23008,
+        "parts": 1,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 2,
+        "flipped_faces": 0
+      }
+    },
+    "orient": {
+      "long_axis_tilt_deg": 0.5,
+      "flipped_head_up": false,
+      "extent_long_mid_thin": [
+        0.998,
+        0.998,
+        0.995
+      ]
+    },
+    "spherify": {
+      "radius_spread_before": [
+        0.939,
+        1.054
+      ]
+    },
+    "decimate": {
+      "tris_before": 23008,
+      "ratio": 0.0435,
+      "flipped_after_decimate_fixed": 0,
+      "after": {
+        "verts": 500,
+        "tris": 1000,
+        "parts": 1,
+        "boundary_edges": 0,
+        "nonmanifold_edges": 2,
+        "flipped_faces": 0
+      }
+    },
+    "game_spec": {
+      "scale": 0.0672,
+      "size_m": [
+        0.067,
+        0.067,
+        0.067
+      ],
+      "bounds_min": [
+        -0.033,
+        -0.034,
+        -0.033
+      ],
+      "origin": "중심 (물리 계산 기준)"
+    },
+    "material": {
+      "material": "M_TennisBall",
+      "texture_size": 512,
+      "gray_lining_recolored": 0.0,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.488,
+        0.487
+      ],
+      "mean_roughness": [
+        0.584,
+        0.584
+      ]
+    },
+    "fbx_check": {
+      "file_mb": 0.05,
+      "meshes": {
+        "TennisBall": 1000
+      },
+      "size_m": [
+        0.067,
+        0.067,
+        0.067
+      ],
+      "bounds_min": [
+        -0.033,
+        -0.034,
+        -0.033
+      ],
+      "materials": [
+        "M_TennisBall"
+      ]
+    }
+  },
+  "TennisRacket": {
+    "raw": {
+      "verts": 43577,
+      "tris": 62852,
+      "parts": 806,
+      "boundary_edges": 22842,
+      "nonmanifold_edges": 32,
+      "flipped_faces": 30939,
+      "size_m": [
+        0.424,
+        0.066,
+        0.999
+      ],
+      "origin_offset_m": [
+        0.0,
+        0.0,
+        -0.0
+      ]
+    },
+    "clean": {
+      "raw": {
+        "verts": 43577,
+        "tris": 62852
+      },
+      "after_weld": {
+        "verts": 31440,
+        "tris": 62736,
+        "parts": 46,
+        "boundary_edges": 189,
+        "nonmanifold_edges": 190,
+        "flipped_faces": 243
+      },
+      "slit_verts_zipped": 89,
+      "small_parts_removed": 40,
+      "duplicate_faces_removed": 0,
+      "loose_verts_removed": 4,
+      "holes_filled": 0,
+      "tears": {
+        "passes": 3,
+        "tears_closed": 56,
+        "bad_edges_left": 6
+      },
+      "after": {
+        "verts": 30369,
+        "tris": 60740,
+        "parts": 11,
+        "boundary_edges": 4,
+        "nonmanifold_edges": 2,
+        "flipped_faces": 0
+      }
+    },
+    "strings_removed": {
+      "string_faces_removed": 30933,
+      "string_pieces_removed": 175,
+      "frame": {
+        "verts": 14785,
+        "tris": 28333,
+        "parts": 2,
+        "boundary_edges": 1297,
+        "nonmanifold_edges": 0,
+        "flipped_faces": 368
+      }
+    },
+    "orient": {
+      "long_axis_tilt_deg": 0.2,
+      "flipped_head_up": true,
+      "extent_long_mid_thin": [
+        0.999,
+        0.424,
+        0.066
+      ]
+    },
+    "decimate": {
+      "tris_before": 28333,
+      "ratio": 0.1412,
+      "flipped_after_decimate_fixed": 162,
+      "after": {
+        "verts": 2513,
+        "tris": 4000,
+        "parts": 3,
+        "boundary_edges": 1086,
+        "nonmanifold_edges": 0,
+        "flipped_faces": 0
+      }
+    },
+    "game_spec": {
+      "scale": 0.6857,
+      "size_m": [
+        0.291,
+        0.045,
+        0.685
+      ],
+      "bounds_min": [
+        -0.145,
+        -0.023,
+        0.0
+      ],
+      "origin": "손잡이 끝 바닥 중앙"
+    },
+    "material": {
+      "material": "M_TennisRacket",
+      "texture_size": 1024,
+      "gray_lining_recolored": 0.0,
+      "dark_spots_lifted": 0.0,
+      "saturation": [
+        0.221,
+        0.198
+      ],
+      "mean_roughness": [
+        0.397,
+        0.456
+      ]
+    },
+    "strings_new": {
+      "rim_points": 90,
+      "head_size_m": [
+        0.27,
+        0.318
+      ],
+      "plane_y": -0.0006
+    },
+    "fbx_check": {
+      "file_mb": 0.17,
+      "meshes": {
+        "TennisRacket_Frame": 4000,
+        "TennisRacket_Strings": 90
+      },
+      "size_m": [
+        0.291,
+        0.045,
+        0.685
+      ],
+      "bounds_min": [
+        -0.145,
+        -0.023,
+        -0.0
+      ],
+      "materials": [
+        "M_TennisRacket",
+        "M_TennisRacket_Strings"
+      ]
+    }
+  }
+}

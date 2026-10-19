@@ -62,7 +62,7 @@ namespace FirstPersonTennis
 
             float speed = (IsSprinting ? config.runSpeed : config.walkSpeed) * Stats.MoveScale;
             Vector3 target = wish * speed;
-            Velocity = Vector3.MoveTowards(Velocity, target, Court.MoveRate(Velocity, target, config.acceleration) * Time.deltaTime);
+            Velocity = Vector3.MoveTowards(Velocity, target, Court.MoveRate(Velocity, target, config.acceleration, Stats.SlideScale) * Time.deltaTime);
             UpdateStamina(Time.deltaTime);
 
             transform.position = Clamp(transform.position + Velocity * Time.deltaTime);

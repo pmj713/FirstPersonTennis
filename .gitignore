@@ -73,3 +73,14 @@ InitTestScene*.unity*
 /[Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Flow/UnitOptions.db.meta
 /[Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Core/Property Providers
 /[Aa]ssets/Unity.VisualScripting.Generated/VisualScripting.Core/Property Providers.meta
+
+# Python
+__pycache__/
+
+# Blender 백업
+*.blend1
+
+# VARCO 원본 GLB (용량이 커서 저장소 밖에 둔다. ArtSource/Blender 스크립트가 읽는 입력)
+ArtSource/**/Raw/*.glb
+# tennis_animations.py가 TennisPlayer_Final.blend에서 다시 만드는 파일
+ArtSource/Character/Final/TennisPlayer_Tennis.blend

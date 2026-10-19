@@ -316,7 +316,7 @@ namespace FirstPersonTennis
 
         // 서브: 대각선 서비스 박스의 서버 기준 왼쪽(-1)~가운데(0)~오른쪽(+1), 서비스라인 조금 안쪽을 노린다.
         public static ShotSolution PlanServe(TennisConfig config, ServeType type, float aim, Vector3 contact,
-            int serverSide, bool deuce, bool secondServe, float power = 1f, float spinScale = 1f)
+            int serverSide, bool deuce, float power = 1f, float spinScale = 1f)
         {
             int receiver = -serverSide;
             Court.ServiceBox(receiver, deuce, out float xMin, out float xMax);
@@ -336,7 +336,7 @@ namespace FirstPersonTennis
                 _ => config.flatServe,
             };
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
-            float speed = p.speed * pace * power * (secondServe ? config.secondServeSpeedScale : 1f);
+            float speed = p.speed * pace * power;
             float sideSpin = -p.sideSpin * pace * pace * spinScale * facing; // + = 서버 기준 왼쪽으로 휨
             return ShotSolver.SolveDrive(contact, target, speed, p.spin * pace * pace * spinScale, Court.Surface, -20f, sideSpin);
         }

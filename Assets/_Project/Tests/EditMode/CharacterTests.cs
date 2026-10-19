@@ -11,7 +11,7 @@ namespace FirstPersonTennis.Tests
         static CharacterPreset Named(string name) => System.Array.Find(Roster, c => c.name == name);
 
         [Test]
-        // 합계는 150에서 시작해 밸런스에 맞춰 선수별로 조정한다 (수비형 170). 스탯은 0~100 안이어야 한다.
+        // 합계는 150에서 시작해 밸런스에 맞춰 선수별로 조정한다. 스탯은 0~100 안이어야 한다.
         public void RosterStatsAreInRange()
         {
             Assert.AreEqual(4, Roster.Length);
@@ -29,12 +29,12 @@ namespace FirstPersonTennis.Tests
             Assert.AreEqual(1f, s.SpinScale, 1e-5f);
             Assert.AreEqual(1f, s.MoveScale, 1e-5f);
             Assert.AreEqual(1f, s.RecoveryScale, 1e-5f);
-            Assert.AreEqual(0f, s.PowerRisk, 1e-5f);
+            Assert.AreEqual(1f, s.SlideScale, 1e-5f);
         }
 
-        // 스탯 100이면 정한 만큼, 0이면 같은 만큼 반대로. 기술의 오차 효과가 가장 넓고 속도의 이동 효과가 가장 좁다.
+        // 스탯 100이면 정한 만큼, 0이면 같은 만큼 반대로. 기술의 오차 효과가 가장 넓다.
         [Test]
-        public void EffectsScaleWithTheStatAndSpeedIsNarrowest()
+        public void EffectsScaleWithTheStatAndTechniqueIsWidest()
         {
             StatTuning t = StatTuning.Default;
             PlayerStats top = StatsOf(new CharacterPreset { power = 100, technique = 100, speed = 100 });
@@ -45,7 +45,7 @@ namespace FirstPersonTennis.Tests
             Assert.AreEqual(1f + t.speedMoveAtMax, top.MoveScale, 1e-5f);
             Assert.AreEqual(1f - t.speedMoveAtMax, bottom.MoveScale, 1e-5f);
 
-            Assert.Less(t.speedMoveAtMax, t.powerSpeedAtMax);
+            Assert.Less(t.speedMoveAtMax, t.techniqueErrorAtMax);
             Assert.Less(t.powerSpeedAtMax, t.techniqueErrorAtMax);
 
             // 범위를 벗어난 스탯은 0~100으로 자른다
@@ -70,12 +70,11 @@ namespace FirstPersonTennis.Tests
             PlayerStats control = StatsOf(Named("컨트롤형"));
             PlayerStats defence = StatsOf(Named("수비형"));
             Assert.Greater(attack.PowerScale, 1f);
-            Assert.Greater(attack.PowerRisk, 0f, "강하게 칠수록 범실이 늘어난다");
             Assert.Less(control.ErrorScale, 1f);
             Assert.Greater(control.SpinScale, 1f);
             Assert.Greater(defence.MoveScale, 1f);
             Assert.Greater(defence.RecoveryScale, 1f);
-            Assert.AreEqual(0f, control.PowerRisk, 1e-5f);
+            Assert.Less(defence.SlideScale, 1f, "발이 빠른 선수는 클레이에서 덜 미끄러진다");
         }
 
         // 힘이 세면 더 빠르게 날아가지만 같은 목표에 떨어지도록 계획된다
@@ -88,7 +87,8 @@ namespace FirstPersonTennis.Tests
             ShotSolution normal = ShotPlanner.Plan(config, ShotIntent.Default, contact, -1);
             ShotSolution strong = ShotPlanner.Plan(config, ShotIntent.Default, contact, -1, attack.PowerScale, attack.SpinScale);
             Assert.IsTrue(strong.Success, $"landing {strong.Landing}");
-            Assert.Greater(strong.Velocity.magnitude, normal.Velocity.magnitude * 1.03f);
+            Assert.Greater(strong.Velocity.magnitude, normal.Velocity.magnitude * (1f + (attack.PowerScale - 1f) * 0.5f),
+                "힘으로 빨라진 만큼의 절반 이상은 궤적 계산 뒤에도 남는다");
             Assert.AreEqual(normal.Landing.z, strong.Landing.z, 0.5f);
             Assert.IsTrue(Court.IsInSingles(strong.Landing, 1));
             TestConfig.Destroy(config);
@@ -130,7 +130,7 @@ namespace FirstPersonTennis.Tests
                 foreach (bool deuce in new[] { true, false })
                 {
                     Vector3 contact = Court.ServePosition(-1, deuce, 0.6f) + new Vector3(0.35f, config.serveIdealHeight, 0.3f);
-                    ShotSolution sol = ShotPlanner.PlanServe(config, type, aim, contact, -1, deuce, false, s.PowerScale, s.SpinScale);
+                    ShotSolution sol = ShotPlanner.PlanServe(config, type, aim, contact, -1, deuce, s.PowerScale, s.SpinScale);
                     var state = new BallState(contact, sol.Velocity, sol.Spin);
                     Vector3 bounce = default;
                     bool netted = false;

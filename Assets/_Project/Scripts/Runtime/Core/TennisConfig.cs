@@ -80,7 +80,6 @@ namespace FirstPersonTennis
         [Header("스윙")]
         [Tooltip("스윙 시작부터 임팩트까지 (초)")]
         public float swingWindup = 0.25f;
-        public float followThrough = 0.35f;
         [Tooltip("임팩트 몇 초 전부터 라켓을 뒤로 빼기 시작하는지")]
         public float takeBackLead = 0.9f;
 
@@ -107,7 +106,8 @@ namespace FirstPersonTennis
         public float volleyMinHeight = 0.2f;
 
         [Header("서브")]
-        public ShotProfile flatServe = new ShotProfile { speed = 46f, spin = 40f };
+        [Tooltip("플랫 서브 속도는 머리 위 스매시의 화면 빠르기(smash 속도 × smashTempoBoost)와 맞춘다")]
+        public ShotProfile flatServe = new ShotProfile { speed = 51f, spin = 40f };
         public ShotProfile sliceServe = new ShotProfile { speed = 40f, spin = 80f, sideSpin = 120f };
         public ShotProfile kickServe = new ShotProfile { speed = 34f, spin = 260f, sideSpin = -40f };
         [Tooltip("손에서 토스한 공이 올라가는 최고 높이 (m)")]
@@ -125,7 +125,6 @@ namespace FirstPersonTennis
         public float serveDepthInset = 0.9f;
         [Tooltip("서비스 박스 옆 라인에서 안쪽으로 노리는 거리 (m)")]
         public float serveAimInset = 0.5f;
-        public float secondServeSpeedScale = 0.85f;
         public float secondServeErrorScale = 0.6f;
         [Tooltip("서브 기본 오차 (도)")]
         public float serveBaseError = 0.5f;

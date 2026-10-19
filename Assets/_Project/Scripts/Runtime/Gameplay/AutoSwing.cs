@@ -18,7 +18,6 @@ namespace FirstPersonTennis
         public float Tired;     // 스테미너 바닥
         public float Aim;       // 좌우 방향을 크게 줌
         public float BallSpeed; // 빠르게 온 공
-        public float Power;     // 힘 스탯만큼 강하게 침
         public bool IsServe;
         public float Timing;    // 서브 타이밍 (1 - 타이밍 품질)
         public bool Early;      // 서브: 공이 이상적 높이보다 높을 때 침
@@ -35,7 +34,7 @@ namespace FirstPersonTennis
         [SerializeField] TennisConfig config;
         [SerializeField] TennisBall ball;
         [SerializeField] int side = -1;
-        [SerializeField] RacketSwingVisual racket;
+        [SerializeField] AthleteAnimator racket; // 선수 모델의 스윙 애니메이션
         [Tooltip("IShotIntentSource를 구현한 컴포넌트")]
         [SerializeField] MonoBehaviour intentSource;
         [SerializeField] float errorScale = 1f;
@@ -104,7 +103,10 @@ namespace FirstPersonTennis
             {
                 PredictedApex = 0f;
                 if (racket != null && !IsSwinging)
-                    racket.SetPreparation(StrokeSide.Forehand, servePrep ? ShotType.Smash : ShotType.Topspin, servePrep ? 1f : 0f);
+                {
+                    if (servePrep) racket.PrepareServe();
+                    else racket.SetPreparation(StrokeSide.Forehand, ShotType.Topspin, 0f);
+                }
                 return;
             }
 
@@ -174,6 +176,7 @@ namespace FirstPersonTennis
         {
             IsSwinging = false;
             servePrep = false;
+            if (racket != null) racket.Stop();
         }
 
         // 토스하는 동안 라켓을 머리 위로 들어 둔다
@@ -186,26 +189,25 @@ namespace FirstPersonTennis
         {
             servePrep = false;
             Vector3 contact = ball.State.Position;
-            ShotSolution solution = ShotPlanner.PlanServe(config, type, aim, contact, side, toDeuce, secondServe,
+            ShotSolution solution = ShotPlanner.PlanServe(config, type, aim, contact, side, toDeuce,
                 Stats.PowerScale, Stats.SpinScale);
             Vector3 velocity = solution.Velocity;
             Vector3 spin = solution.Spin;
 
             float timing = 1f - Mathf.Clamp01(quality);
-            float bad = timing + Stats.PowerRisk;
+            float bad = timing;
             float scale = errorScale * Stats.ErrorScale * (secondServe ? config.secondServeErrorScale : 1f);
             float sigma = (config.serveBaseError + bad * config.serveErrorPerBad) * scale;
             ApplyAimError(ref velocity, ref spin, Gaussian() * sigma, Gaussian() * sigma);
             velocity *= Mathf.Lerp(0.85f, 1f, quality); // 타이밍이 나쁘면 힘도 빠진다
 
-            if (racket != null) racket.PlaySwing(StrokeSide.Forehand, ShotType.Smash, 0.04f, config.followThrough);
+            if (racket != null) racket.PlayServe(type);
             ball.LaunchServe(side, velocity, spin, toDeuce);
             SwingResolved?.Invoke(true);
             Struck?.Invoke(new ShotQuality
             {
                 IsServe = true,
                 Timing = timing,
-                Power = Stats.PowerRisk,
                 Early = contact.y > config.serveIdealHeight,
                 Badness = bad,
             });
@@ -218,7 +220,7 @@ namespace FirstPersonTennis
         {
             Vector3 contact = FeedContact;
             ball.Hold(contact);
-            if (racket != null) racket.PlaySwing(StrokeSide.Forehand, intent.Type, 0.05f, config.followThrough);
+            if (racket != null) racket.PlaySwing(StrokeSide.Forehand, intent.Type, 0.05f, contact);
             Strike(intent, contact, config.idealLateral, false, false);
         }
 
@@ -343,7 +345,7 @@ namespace FirstPersonTennis
             lockedIntent = intent;
             lockedVolley = volley;
             source?.OnSwingCommitted();
-            if (racket != null) racket.PlaySwing(PredictedStroke, VisualType(intent.Type, volley), timeToImpact, config.followThrough);
+            if (racket != null) racket.PlaySwing(PredictedStroke, VisualType(intent.Type, volley), timeToImpact, ContactPoint);
         }
 
         static ShotType VisualType(ShotType type, bool volley) =>
@@ -402,9 +404,8 @@ namespace FirstPersonTennis
                 Tired = mover != null && mover.Exhausted ? 0.3f : 0f,
                 Aim = config.aimErrorPenalty * Mathf.Abs(intent.Aim),
                 BallSpeed = Mathf.Max(0f, ball.State.Velocity.magnitude - 25f) * 0.01f,
-                Power = Stats.PowerRisk,
             };
-            q.Badness = Mathf.Clamp(q.Reach + q.Height + q.Running + q.Tired + q.Aim + q.BallSpeed + q.Power, 0f, 1.5f);
+            q.Badness = Mathf.Clamp(q.Reach + q.Height + q.Running + q.Tired + q.Aim + q.BallSpeed, 0f, 1.5f);
             return q;
         }
 

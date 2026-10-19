@@ -165,7 +165,6 @@ namespace FirstPersonTennis
                 if (q.Tired > 0f) items.Add((q.Tired, "스테미너 바닥"));
                 if (q.Aim >= Notable) items.Add((q.Aim, "방향을 크게 줌"));
                 if (q.BallSpeed >= Notable) items.Add((q.BallSpeed, "빠른 공"));
-                if (q.Power >= Notable) items.Add((q.Power, "강하게 침"));
             }
             items.Sort((a, b) => b.value.CompareTo(a.value));
             if (items.Count > 2) items.RemoveRange(2, items.Count - 2);
