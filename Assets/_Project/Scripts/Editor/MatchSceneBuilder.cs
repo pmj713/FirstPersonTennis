@@ -11,7 +11,7 @@ using Object = UnityEngine.Object;
 
 namespace FirstPersonTennis.EditorTools
 {
-    // 경기 씬(하드코트, 플레이어, AI 상대, 공, 심판, 보조 표시, HUD)을 만들고 컴포넌트를 연결한다.
+    // 경기 씬(하드코트, 플레이어, AI 상대, 공, 심판, 튜토리얼, 보조 표시, HUD)을 만들고 컴포넌트를 연결한다.
     // 메뉴: FirstPersonTennis > Build Match Scene. 다시 실행하면 씬을 새로 만든다 (설정 에셋은 유지).
     public static class MatchSceneBuilder
     {
@@ -111,6 +111,15 @@ namespace FirstPersonTennis.EditorTools
             Set(referee, "nearAi", nearAi);
             Set(referee, "nearAiSwing", nearSwing);
 
+            var tutorial = systems.AddComponent<TutorialDirector>();
+            Set(tutorial, "config", config);
+            Set(tutorial, "referee", referee);
+            Set(tutorial, "ball", ball);
+            Set(tutorial, "player", movement);
+            Set(tutorial, "input", gesture);
+            Set(tutorial, "swing", playerSwing);
+            Set(tutorial, "serve", playerServe);
+
             // 카메라 + 소리
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
             var cam = camGo.AddComponent<Camera>();
@@ -122,6 +131,7 @@ namespace FirstPersonTennis.EditorTools
             Set(cameraRig, "config", config);
             Set(cameraRig, "player", movement);
             Set(cameraRig, "ball", ball);
+            Set(cameraRig, "tutorial", tutorial);
             SetArray(cameraRig, "hideInFirstPerson", playerBody.Cast<Object>().ToArray());
             var audioSource = camGo.AddComponent<AudioSource>();
             audioSource.playOnAwake = false;
@@ -134,6 +144,8 @@ namespace FirstPersonTennis.EditorTools
             Transform landing = CreateRing("LandingMarker", 0.35f, 0.5f, m.Marker);
             landing.localScale = Vector3.one * 0.7f;
             Transform range = CreateRing("HitRangeRing", 0.95f, 1f, m.Range);
+            Transform target = CreateRing("TutorialTarget", 0.5f, 0.7f, m.TutorialTarget); // 바깥 반지름 = 도착 판정 거리
+            target.gameObject.SetActive(false);
             var assists = systems.AddComponent<AssistVisuals>();
             Set(assists, "config", config);
             Set(assists, "ball", ball);
@@ -144,6 +156,8 @@ namespace FirstPersonTennis.EditorTools
             Set(assists, "hitRangeRing", range);
             Set(assists, "ballHalo", halo);
             Set(assists, "audioFeedback", audio);
+            Set(assists, "tutorial", tutorial);
+            Set(assists, "tutorialTarget", target);
 
             var marks = systems.AddComponent<BallMarks>();
             Set(marks, "ball", ball);
@@ -157,6 +171,7 @@ namespace FirstPersonTennis.EditorTools
             Set(hud, "playerSwing", playerSwing);
             Set(hud, "playerServe", playerServe);
             Set(hud, "cameraRig", cameraRig);
+            Set(hud, "tutorial", tutorial);
 
             ValidateReferences(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -330,6 +345,7 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Marker = Transparent("LandingMarker", new Color(1f, 0.85f, 0.1f, 0.85f));
             public readonly Material Range = Transparent("HitRange", new Color(1f, 1f, 1f, 0.35f));
             public readonly Material Halo = Transparent("BallHalo", new Color(0.3f, 0.9f, 1f, 0.35f));
+            public readonly Material TutorialTarget = Transparent("TutorialTarget", new Color(0.3f, 0.95f, 0.4f, 0.85f));
             public readonly Material BallMark = Transparent("BallMark", new Color(0.38f, 0.16f, 0.08f, 0.6f));
         }
 

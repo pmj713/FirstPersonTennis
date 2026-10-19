@@ -13,6 +13,8 @@ namespace FirstPersonTennis
         [SerializeField] TennisConfig config;
         [SerializeField] PlayerMovement player;
         [SerializeField] TennisBall ball;
+        [Tooltip("튜토리얼 이동 과제에서는 공 대신 목표 원을 본다")]
+        [SerializeField] TutorialDirector tutorial;
         [Tooltip("1인칭에서 안 보이게 할 내 몸 (그림자는 남긴다)")]
         [SerializeField] Renderer[] hideInFirstPerson;
         [SerializeField] float maxTurnSpeed = 300f;
@@ -64,7 +66,8 @@ namespace FirstPersonTennis
                 transform.position = body + Vector3.up * config.eyeHeight;
             }
 
-            Vector3 look = ball.IsLive ? ball.transform.position : new Vector3(0f, 1f, Court.HalfLength * 0.6f * facing);
+            Vector3 look = tutorial != null && tutorial.TargetActive ? tutorial.TargetPosition :
+                ball.IsLive ? ball.transform.position : new Vector3(0f, 1f, Court.HalfLength * 0.6f * facing);
             Vector3 dir = look - transform.position;
             if (dir.sqrMagnitude > 1e-4f)
             {

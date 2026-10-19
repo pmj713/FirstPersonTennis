@@ -26,6 +26,17 @@ namespace FirstPersonTennis
         public bool IsFair => Badness >= GoodBelow && Badness < FairBelow;
     }
 
+    // 마지막으로 친 공의 입력과 상황. 튜토리얼이 과제에 맞는 샷인지 본다.
+    public struct ShotRecord
+    {
+        public ShotIntent Intent;
+        public Vector3 Contact;
+        public bool Volley;
+        public bool Auto;          // 선입력 없이 자동 기본 스트로크로 침
+        public bool Serve;
+        public ServeType ServeType;
+    }
+
     // 선입력이 있고 공이 스윙 범위로 들어오면, 임팩트 시각에 맞춰 스윙을 자동 실행한다.
     // 바운드 후 스트로크, 바운드 전 발리, 머리 위 스매시, 서브 타격을 맡는다. 플레이어와 AI가 같이 쓴다.
     [DefaultExecutionOrder(-5)]
@@ -54,6 +65,7 @@ namespace FirstPersonTennis
         public bool HasLanding { get; private set; }
         public Vector3 LandingPoint { get; private set; }
         public float PredictedApex { get; private set; } // 남은 궤적의 최고 높이
+        public ShotRecord LastShot { get; private set; }
 
         // 네트~서비스라인 사이: 바운드 전에 닿으면 발리
         public bool InVolleyZone => transform.position.z * side <= Court.ServiceLine;
@@ -68,6 +80,7 @@ namespace FirstPersonTennis
         long impactStep;
         ShotIntent lockedIntent;
         bool lockedVolley;
+        bool lockedAuto;
         bool servePrep;
 
         float Facing => Court.Facing(side);
@@ -134,10 +147,12 @@ namespace FirstPersonTennis
             ShotIntent intent = default;
             bool hasIntent = source != null && source.TryGetIntent(out intent);
             bool skip = source != null && source.SkipRequested;
+            bool auto = false;
             if (!hasIntent && !skip && config.autoStrokeWhenNoInput)
             {
                 intent = ShotIntent.Default;
                 hasIntent = true;
+                auto = true;
             }
             if (skip) hasIntent = false;
             bool smash = hasIntent && intent.Type == ShotType.Smash;
@@ -166,7 +181,7 @@ namespace FirstPersonTennis
 
             int windupSteps = Mathf.CeilToInt(config.swingWindup * ball.TimeScale / BallPhysics.Step);
             if (hasIntent && inSwing && index >= 1 && index <= windupSteps)
-                StartSwing(intent, volley, ball.StepIndex + index, TimeToContact);
+                StartSwing(intent, volley, auto, ball.StepIndex + index, TimeToContact);
         }
 
         // ── 서브 ──────────────────────────────────────────────
@@ -202,6 +217,7 @@ namespace FirstPersonTennis
             velocity *= Mathf.Lerp(0.85f, 1f, quality); // 타이밍이 나쁘면 힘도 빠진다
 
             if (racket != null) racket.PlayServe(type);
+            LastShot = new ShotRecord { Intent = new ShotIntent { Aim = aim }, Contact = contact, Serve = true, ServeType = type };
             ball.LaunchServe(side, velocity, spin, toDeuce);
             SwingResolved?.Invoke(true);
             Struck?.Invoke(new ShotQuality
@@ -221,7 +237,7 @@ namespace FirstPersonTennis
             Vector3 contact = FeedContact;
             ball.Hold(contact);
             if (racket != null) racket.PlaySwing(StrokeSide.Forehand, intent.Type, 0.05f, contact);
-            Strike(intent, contact, config.idealLateral, false, false);
+            Strike(intent, contact, config.idealLateral, false, false, false);
         }
 
         public Vector3 FeedContact => transform.position +
@@ -334,16 +350,17 @@ namespace FirstPersonTennis
             Vector3 contact = ball.State.Position;
             Evaluate(contact, lockedIntent.Type == ShotType.Smash, out bool inHit, out _, out float lateral);
             bool hit = Incoming && inHit;
-            if (hit) Strike(lockedIntent, contact, lateral, true, lockedVolley);
+            if (hit) Strike(lockedIntent, contact, lateral, true, lockedVolley, lockedAuto);
             SwingResolved?.Invoke(hit);
         }
 
-        void StartSwing(ShotIntent intent, bool volley, long step, float timeToImpact)
+        void StartSwing(ShotIntent intent, bool volley, bool auto, long step, float timeToImpact)
         {
             IsSwinging = true;
             impactStep = step;
             lockedIntent = intent;
             lockedVolley = volley;
+            lockedAuto = auto;
             source?.OnSwingCommitted();
             if (racket != null) racket.PlaySwing(PredictedStroke, VisualType(intent.Type, volley), timeToImpact, ContactPoint);
         }
@@ -351,7 +368,7 @@ namespace FirstPersonTennis
         static ShotType VisualType(ShotType type, bool volley) =>
             volley && type != ShotType.Smash ? ShotType.Volley : type;
 
-        void Strike(ShotIntent intent, Vector3 contact, float lateral, bool withError, bool volley)
+        void Strike(ShotIntent intent, Vector3 contact, float lateral, bool withError, bool volley, bool auto)
         {
             ShotSolution solution = volley
                 ? ShotPlanner.PlanVolley(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale)
@@ -372,6 +389,7 @@ namespace FirstPersonTennis
 
             // 머리 위에서 친 스매시는 빠르게 날아간다
             bool overhead = intent.Type == ShotType.Smash && contact.y >= config.smashMinHeight;
+            LastShot = new ShotRecord { Intent = intent, Contact = contact, Volley = volley, Auto = auto };
             ball.Launch(side, velocity, spin, overhead ? config.smashTempoBoost : 1f);
             if (withError) Struck?.Invoke(quality);
         }

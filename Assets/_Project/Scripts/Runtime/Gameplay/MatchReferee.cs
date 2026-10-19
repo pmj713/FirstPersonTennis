@@ -4,12 +4,13 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    public enum GameMode { Match, Practice, Watch }
+    public enum GameMode { Match, Practice, Watch, Tutorial }
     public enum MatchPhase { Menu, Serve, Rally, PointOver, MatchOver }
     public enum PointReason { Out, Net, DoubleBounce, Ace, DoubleFault }
 
     // 경기 진행과 판정: 서브(폴트·렛·더블 폴트), 랠리(아웃·네트·투바운드), 점수, 서버 교대.
     // 연습 모드는 1단계처럼 AI가 공을 주고 랠리만 한다. 관전 모드는 가까운 쪽도 AI가 맡아 AI끼리 경기한다.
+    // 튜토리얼은 자리 잡기와 공 주기만 하고 판정은 TutorialDirector가 과제별로 한다 (AI는 받아치지 않음).
     public class MatchReferee : MonoBehaviour
     {
         [SerializeField] TennisConfig config;
@@ -43,6 +44,8 @@ namespace FirstPersonTennis
         public bool Paused { get; private set; }
         public int PlayerSide => player.Side;
         public int AiSide => -player.Side;
+        bool Judging => Mode != GameMode.Tutorial;
+        static float ServeOffset => Court.SinglesHalfWidth * 0.15f;
 
         // 연습 모드 기록
         public int PracticePlayerPoints { get; private set; }
@@ -116,7 +119,7 @@ namespace FirstPersonTennis
 
         void Update()
         {
-            if (Phase != MatchPhase.Rally || !ball.IsLive || ball.LastHitterSide == 0) return;
+            if (!Judging || Phase != MatchPhase.Rally || !ball.IsLive || ball.LastHitterSide == 0) return;
             JudgeRolling();
 
             // 그래도 판정 없이 오래 남은 공 (안전장치)
@@ -134,8 +137,7 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
-            SetWatching(false);
-            Mode = GameMode.Match;
+            SetMode(GameMode.Match);
             Phase = MatchPhase.Menu;
             Score = null;
             float baseline = Court.HalfLength + 0.8f;
@@ -166,8 +168,7 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
-            Mode = mode;
-            SetWatching(mode == GameMode.Watch);
+            SetMode(mode);
             ai.SetDifficulty(difficulty);
             if (Watching) nearAi.SetDifficulty(difficulty);
             SetCharacters(playerCharacterIndex, aiCharacterIndex); // 켜진 관전 AI에도 다시 적용
@@ -189,8 +190,7 @@ namespace FirstPersonTennis
         {
             StopAllCoroutines();
             ResetPlayers();
-            Mode = GameMode.Practice;
-            SetWatching(false);
+            SetMode(GameMode.Practice);
             ai.SetDifficulty(difficulty);
             Score = null;
             PracticePlayerPoints = PracticeAiPoints = RallyReturns = BestReturns = 0;
@@ -214,6 +214,14 @@ namespace FirstPersonTennis
             }
             Paused = paused;
             UpdateInput();
+        }
+
+        // 모드에 맞춰 관전 AI와 튜토리얼 AI(공만 주는 상대)를 켜고 끈다
+        void SetMode(GameMode mode)
+        {
+            Mode = mode;
+            SetWatching(mode == GameMode.Watch);
+            ai.FeedOnly = mode == GameMode.Tutorial;
         }
 
         void UpdateInput()
@@ -265,20 +273,19 @@ namespace FirstPersonTennis
             ResetPlayers();
             int server = Score.Server;
             bool deuce = Score.ServeFromDeuce;
-            float offset = Court.SinglesHalfWidth * 0.15f;
             crossedNet = false;
             Phase = MatchPhase.Serve;
 
             if (server == PlayerSide)
             {
-                PlaceNear(Court.ServePosition(server, deuce, offset));
+                PlaceNear(Court.ServePosition(server, deuce, ServeOffset));
                 ai.ResetTo(Court.ReceivePosition(-server, deuce));
                 if (Watching) nearAi.BeginServe(deuce, ServeNumber == 2);
                 else playerServe.BeginTurn(deuce, ServeNumber == 2);
             }
             else
             {
-                ai.ResetTo(Court.ServePosition(server, deuce, offset));
+                ai.ResetTo(Court.ServePosition(server, deuce, ServeOffset));
                 PlaceNear(Court.ReceivePosition(-server, deuce));
                 ai.BeginServe(deuce, ServeNumber == 2);
             }
@@ -300,6 +307,50 @@ namespace FirstPersonTennis
             ai.Feed();
         }
 
+        // ── 튜토리얼 ──────────────────────────────────────────
+
+        public void StartTutorial()
+        {
+            StopAllCoroutines();
+            SetMode(GameMode.Tutorial);
+            Score = null;
+            SetPaused(false);
+            float baseline = Court.HalfLength + 0.8f;
+            SetupDrill(new Vector3(0f, 0f, baseline * PlayerSide), new Vector3(0f, 0f, baseline * AiSide));
+        }
+
+        // 연습 한 번 준비: 두 선수를 세우고 공을 AI 손에 둔다
+        public void SetupDrill(Vector3 playerPosition, Vector3 aiPosition)
+        {
+            ResetPlayers();
+            player.ResetTo(playerPosition);
+            ai.ResetTo(aiPosition);
+            ball.Hold(ai.FeedContact);
+            Phase = MatchPhase.PointOver;
+            UpdateInput();
+        }
+
+        // AI가 정해진 구질로 공을 준다
+        public void FeedDrill(ShotIntent intent)
+        {
+            crossedNet = false;
+            Phase = MatchPhase.Rally;
+            ai.Feed(intent);
+        }
+
+        // 내 서브 연습 한 번: 서브 자리에 서고 AI는 대각선 리시브 자리에 선다
+        public void SetupServeDrill(bool deuce)
+        {
+            ResetPlayers();
+            crossedNet = false;
+            ServeNumber = 1;
+            player.ResetTo(Court.ServePosition(PlayerSide, deuce, ServeOffset));
+            ai.ResetTo(Court.ReceivePosition(AiSide, deuce));
+            Phase = MatchPhase.Serve;
+            playerServe.BeginTurn(deuce, false);
+            UpdateInput();
+        }
+
         // ── 판정 ──────────────────────────────────────────────
 
         void OnLaunched(int hitter)
@@ -319,7 +370,7 @@ namespace FirstPersonTennis
 
         void OnServeWhiffed()
         {
-            if (Phase == MatchPhase.Serve) Fault(true);
+            if (Judging && Phase == MatchPhase.Serve) Fault(true);
         }
 
         void OnBounced(Vector3 point) => Judge(point, ball.BouncesSinceHit);
@@ -327,7 +378,7 @@ namespace FirstPersonTennis
         // bounce: 친 뒤 몇 번째 바운드인지 (1 = 첫 바운드)
         void Judge(Vector3 point, int bounce)
         {
-            if (Phase != MatchPhase.Rally) return;
+            if (!Judging || Phase != MatchPhase.Rally) return;
             int hitter = ball.LastHitterSide;
             if (hitter == 0) return;
             int receiver = -hitter;

@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 
 namespace FirstPersonTennis
 {
-    // 프로토타입용 IMGUI HUD: 시작 메뉴, 점수판, 심판 콜, 서브 토스 미터, 일시정지, 경기 결과. 정식 UI는 이후 단계에서 교체.
+    // 프로토타입용 IMGUI HUD: 시작 메뉴, 점수판, 심판 콜, 서브 토스 미터, 일시정지, 경기 결과, 튜토리얼 안내. 정식 UI는 이후 단계에서 교체.
     public class TennisHud : MonoBehaviour
     {
         [SerializeField] TennisConfig config;
@@ -14,6 +14,7 @@ namespace FirstPersonTennis
         [SerializeField] AutoSwing playerSwing;
         [SerializeField] PlayerServe playerServe;
         [SerializeField] FirstPersonBallCamera cameraRig;
+        [SerializeField] TutorialDirector tutorial;
 
         static readonly string[] HelpLines =
         {
@@ -26,7 +27,8 @@ namespace FirstPersonTennis
             "T 슬로모션 · Esc 일시정지 · H 도움말",
         };
 
-        static readonly string[] ModeNames = { "경기", "랠리 연습", "AI 대결 관전" };
+        static readonly GameMode[] MenuModes = { GameMode.Match, GameMode.Practice, GameMode.Tutorial, GameMode.Watch };
+        static readonly string[] ModeNames = { "경기", "랠리 연습", "튜토리얼", "AI 대결 관전" };
         static readonly string[] FormatNames = { "타이브레이크", "숏세트 (4게임)", "1세트", "3세트 (2선승)" };
         static readonly string[] DifficultyNames = { "쉬움", "보통", "어려움" };
         static readonly string[] CourtNames = { "하드", "클레이", "잔디" };
@@ -71,6 +73,7 @@ namespace FirstPersonTennis
             playerSwing.SwingResolved += OnSwingResolved;
             playerSwing.Struck += OnStruck;
             input.IntentRejected += OnIntentRejected;
+            tutorial.Said += Show;
         }
 
         void OnDisable()
@@ -81,6 +84,7 @@ namespace FirstPersonTennis
             playerSwing.SwingResolved -= OnSwingResolved;
             playerSwing.Struck -= OnStruck;
             input.IntentRejected -= OnIntentRejected;
+            tutorial.Said -= Show;
         }
 
         bool InPlay => referee.Phase != MatchPhase.Menu && referee.Phase != MatchPhase.MatchOver && !referee.Paused;
@@ -188,13 +192,16 @@ namespace FirstPersonTennis
                 return;
             }
 
-            if (referee.Mode != GameMode.Practice) DrawScoreboard(w);
+            bool tutorialMode = referee.Mode == GameMode.Tutorial;
+            float bannerY = h * 0.2f;
+            if (tutorialMode) bannerY = Mathf.Max(bannerY, DrawTutorial(w) + 8f); // 안내 패널 아래로
+            else if (referee.Mode != GameMode.Practice) DrawScoreboard(w);
             else DrawPracticeScore(w);
 
             if (Time.unscaledTime < messageUntil)
-                GUI.Label(new Rect(0f, h * 0.2f, w, 52f), message, banner);
+                GUI.Label(new Rect(0f, bannerY, w, 52f), message, banner);
             if (Time.unscaledTime < subMessageUntil)
-                GUI.Label(new Rect(0f, h * 0.2f + 52f, w, 40f), subMessage, subBanner);
+                GUI.Label(new Rect(0f, bannerY + 52f, w, 40f), subMessage, subBanner);
 
             if (referee.Watching)
             {
@@ -219,7 +226,7 @@ namespace FirstPersonTennis
                 (Time.timeScale > 0f && Time.timeScale < 1f ? " · 슬로모션" : ""),
                 smallRight);
 
-            if (showHelp)
+            if (showHelp && !tutorialMode) // 튜토리얼은 위 패널이 과제마다 조작을 알려 준다
             {
                 float top = h - 120f - 24f * HelpLines.Length;
                 Fill(new Rect(10f, top, 620f, 24f * HelpLines.Length + 12f), new Color(0f, 0f, 0f, 0.35f));
@@ -229,6 +236,7 @@ namespace FirstPersonTennis
 
             if (referee.Phase == MatchPhase.MatchOver) DrawMatchOver(w, h);
             else if (referee.Paused) DrawPause(w, h);
+            else if (tutorial.Active && tutorial.Completed) DrawTutorialDone(w, h);
         }
 
         // ── 메뉴와 오버레이 ───────────────────────────────────
@@ -247,10 +255,11 @@ namespace FirstPersonTennis
             DrawCharacterPicker(new Rect(x + cw + 30f, y, cw, 300f));
 
             GUI.Label(new Rect(x, y, cw, 26f), "모드", small);
-            menuMode = (GameMode)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuMode, ModeNames, toolbar);
+            int modeIndex = GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), System.Array.IndexOf(MenuModes, menuMode), ModeNames, toolbar);
+            menuMode = MenuModes[modeIndex];
             y += 76f;
 
-            if (menuMode != GameMode.Practice)
+            if (menuMode == GameMode.Match || menuMode == GameMode.Watch)
             {
                 GUI.Label(new Rect(x, y, cw, 26f), "경기 방식", small);
                 menuRules.format = (MatchFormat)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuRules.format, FormatNames, toolbar);
@@ -260,7 +269,10 @@ namespace FirstPersonTennis
             }
             else
             {
-                GUI.Label(new Rect(x, y, cw, 60f), "점수 없이 상대가 주는 공으로 랠리만 합니다.\n서브는 경기 모드에서 연습하세요.", small);
+                string about = menuMode == GameMode.Tutorial
+                    ? "이동 → 선입력 → 구질 5종 → 발리 → 서브를\n과제 하나씩 연습합니다. 상대는 공만 주고\n보조 표시는 모두 켭니다. Esc에서 과제를 건너뛸 수 있어요."
+                    : "점수 없이 상대가 주는 공으로 랠리만 합니다.\n서브는 경기 모드에서 연습하세요.";
+                GUI.Label(new Rect(x, y, cw, 100f), about, small);
                 y += 120f;
             }
 
@@ -269,14 +281,18 @@ namespace FirstPersonTennis
             if (court != Court.Type) config.SelectCourt(court); // 고르는 즉시 뒤의 코트가 바뀐다
             y += 76f;
 
-            GUI.Label(new Rect(x, y, cw, 26f), "AI 난이도", small);
-            menuDifficulty = (AiDifficulty)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuDifficulty, DifficultyNames, toolbar);
+            if (menuMode != GameMode.Tutorial) // 튜토리얼 상대는 공만 준다
+            {
+                GUI.Label(new Rect(x, y, cw, 26f), "AI 난이도", small);
+                menuDifficulty = (AiDifficulty)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuDifficulty, DifficultyNames, toolbar);
+            }
 
             if (GUI.Button(new Rect(panel.center.x - 120f, panel.yMax - 72f, 240f, 50f), "시작", button))
             {
                 referee.SetCharacters(menuPlayerCharacter, menuAiCharacter);
                 if (menuMode == GameMode.Match) referee.StartMatch(menuRules, menuDifficulty);
                 else if (menuMode == GameMode.Watch) referee.StartWatch(menuRules, menuDifficulty);
+                else if (menuMode == GameMode.Tutorial) tutorial.Begin();
                 else referee.StartPractice(menuDifficulty);
             }
         }
@@ -317,8 +333,34 @@ namespace FirstPersonTennis
         {
             Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.5f));
             GUI.Label(new Rect(0f, h * 0.35f, w, 50f), "일시정지", big);
-            if (GUI.Button(new Rect(w / 2f - 130f, h * 0.35f + 70f, 260f, 46f), "계속 (Esc)", button)) referee.SetPaused(false);
-            if (GUI.Button(new Rect(w / 2f - 130f, h * 0.35f + 126f, 260f, 46f), "메뉴로", button)) referee.ShowMenu();
+            float y = h * 0.35f + 70f;
+            if (GUI.Button(new Rect(w / 2f - 130f, y, 260f, 46f), "계속 (Esc)", button)) referee.SetPaused(false);
+            if (tutorial.Active && !tutorial.Completed)
+            {
+                y += 56f;
+                if (GUI.Button(new Rect(w / 2f - 130f, y, 260f, 46f), "이 과제 건너뛰기", button))
+                {
+                    tutorial.SkipTask();
+                    referee.SetPaused(false);
+                }
+            }
+            if (GUI.Button(new Rect(w / 2f - 130f, y + 56f, 260f, 46f), "메뉴로", button)) referee.ShowMenu();
+        }
+
+        void DrawTutorialDone(float w, float h)
+        {
+            Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.5f));
+            float pw = 560f, ph = 300f;
+            var panel = new Rect((w - pw) / 2f, (h - ph) / 2f, pw, ph);
+            Fill(panel, new Color(0.05f, 0.08f, 0.12f, 0.92f));
+            GUI.Label(new Rect(panel.x, panel.y + 24f, pw, 44f), "튜토리얼 완료!", big);
+            GUI.Label(new Rect(panel.x + 20f, panel.y + 84f, pw - 40f, 80f),
+                "이제 랠리 연습이나 경기에서 써 보세요.\n조작은 H 도움말에서 다시 볼 수 있어요.", textCenter);
+
+            float y = panel.yMax - 74f, bw = 160f;
+            if (GUI.Button(new Rect(panel.center.x - bw * 1.5f - 12f, y, bw, 48f), "처음부터", button)) tutorial.Begin();
+            if (GUI.Button(new Rect(panel.center.x - bw / 2f, y, bw, 48f), "랠리 연습", button)) referee.StartPractice(menuDifficulty);
+            if (GUI.Button(new Rect(panel.center.x + bw / 2f + 12f, y, bw, 48f), "메뉴로", button)) referee.ShowMenu();
         }
 
         void DrawMatchOver(float w, float h)
@@ -417,6 +459,22 @@ namespace FirstPersonTennis
                 $"랠리 연습 · {Court.Surface.name} · 이번 랠리 {referee.RallyReturns}회 · 최고 {referee.BestReturns}회", smallCenter);
         }
 
+        // 튜토리얼: 단계와 과제, 진행, 방법. 패널 아래 끝 y를 돌려준다
+        float DrawTutorial(float w)
+        {
+            float pw = Mathf.Min(860f, w - 40f);
+            float hintHeight = smallCenter.CalcHeight(new GUIContent(tutorial.TaskHint), pw - 24f);
+            var r = new Rect((w - pw) / 2f, 10f, pw, 72f + hintHeight);
+            Fill(r, new Color(0f, 0f, 0f, 0.55f));
+            GUI.Label(new Rect(r.x, r.y + 4f, pw, 24f),
+                $"튜토리얼 {tutorial.LessonNumber}/{tutorial.LessonCount}단계 · {tutorial.LessonTitle} · 과제 {tutorial.TaskNumber}/{tutorial.TaskCount}",
+                smallCenter);
+            string progress = tutorial.Goal > 1 ? $"  ({tutorial.Progress}/{tutorial.Goal})" : "";
+            GUI.Label(new Rect(r.x, r.y + 28f, pw, 34f), tutorial.TaskText + progress, title);
+            GUI.Label(new Rect(r.x + 12f, r.y + 64f, pw - 24f, hintHeight), tutorial.TaskHint, smallCenter);
+            return r.yMax;
+        }
+
         static int SetGames(Vector2Int set, int side) => side < 0 ? set.x : set.y;
 
         // ── 서브 ──────────────────────────────────────────────
@@ -431,7 +489,7 @@ namespace FirstPersonTennis
                 "초록 칸에서 놓기";
             GUI.Label(new Rect(w / 2f - 330f, h - 88f, 660f, 32f), $"{head} · {state}", textCenter);
             GUI.Label(new Rect(w / 2f - 330f, h - 56f, 660f, 28f),
-                "드래그 ←→ 코너 · 그대로 플랫 · ↓ 슬라이스 · ↑ 킥 (두 번째 서브는 느리지만 안전)", smallCenter);
+                "드래그 ←→ 코너 · 그대로 플랫 · ↓ 슬라이스 · ↑ 킥 (두 번째 서브는 오차가 작아 안전)", smallCenter);
 
             float top = config.serveTossApex + 0.3f;
             var bar = new Rect(w / 2f + 180f, h * 0.28f, 22f, 240f);
@@ -492,6 +550,7 @@ namespace FirstPersonTennis
 
             if (playerSwing.HasLanding && Court.SideOf(playerSwing.LandingPoint.z) == player.Side)
                 Dot(Map(playerSwing.LandingPoint), 10f, new Color(1f, 0.85f, 0.1f));
+            if (tutorial.TargetActive) Dot(Map(tutorial.TargetPosition), 12f, new Color(0.3f, 0.95f, 0.4f));
             Dot(Map(referee.Ai.transform.position), 9f, new Color(0.95f, 0.3f, 0.25f));
             Transform near = referee.Watching && referee.NearAi != null ? referee.NearAi.transform : player.transform;
             Dot(Map(near.position), 9f, new Color(0.35f, 0.6f, 1f));

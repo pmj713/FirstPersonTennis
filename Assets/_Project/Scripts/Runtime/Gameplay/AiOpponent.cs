@@ -30,6 +30,8 @@ namespace FirstPersonTennis
         public bool AtNet => atNet;
         public bool SkipRequested { get; private set; }
         public bool Serving => serveState != ServeState.None;
+        // 튜토리얼: 공을 주기만 하고 받아치지 않는다 (제자리에 선다)
+        public bool FeedOnly { get; set; }
         public Vector3 FeedContact => swing.FeedContact;
         public int Side => swing.Side;
 
@@ -118,6 +120,12 @@ namespace FirstPersonTennis
                 Velocity = Vector3.zero;
                 UpdateServe(dt);
                 UpdateStamina(dt);
+                return;
+            }
+            if (FeedOnly)
+            {
+                Velocity = Vector3.zero;
+                SkipRequested = true;
                 return;
             }
 
@@ -485,17 +493,16 @@ namespace FirstPersonTennis
 
         // ── 연습 모드 ─────────────────────────────────────────
 
-        public void Feed()
+        public void Feed() => Feed(new ShotIntent
         {
-            var intent = new ShotIntent
-            {
-                Type = ShotType.Topspin,
-                Aim = Range(-0.6f, 0.6f),
-                Depth = 1f,
-                SpeedScale = config.feedSpeedScale,
-            };
-            swing.Feed(intent);
-        }
+            Type = ShotType.Topspin,
+            Aim = Range(-0.6f, 0.6f),
+            Depth = 1f,
+            SpeedScale = config.feedSpeedScale,
+        });
+
+        // 정해 준 구질로 공을 준다 (튜토리얼)
+        public void Feed(ShotIntent intent) => swing.Feed(intent);
 
         bool Roll(float chance) => rng.NextDouble() < chance;
 
