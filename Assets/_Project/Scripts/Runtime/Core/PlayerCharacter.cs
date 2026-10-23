@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    // 프리셋 선수. 스탯은 0~100(기준 50)이고 고정이다(직접 배분하지 않음). 같은 선수를 여러 명이 동시에 고를 수 있다.
+    // 프리셋 선수. 스탯은 0~100(이동속도 효과 기준 0, 나머지 효과 기준 50)이고 고정이다(직접 배분하지 않음). 같은 선수를 여러 명이 동시에 고를 수 있다.
     [Serializable]
     public class CharacterPreset
     {
@@ -47,7 +47,7 @@ namespace FirstPersonTennis
         };
     }
 
-    // 스탯 효과: 기준 50에서 100이 됐을 때 바뀌는 비율. 0이면 같은 만큼 반대로 바뀐다 (그 사이는 비례).
+    // 이동속도 효과는 0→100, 나머지 효과는 50→100에서 바뀌는 비율이다.
     [Serializable]
     public struct StatTuning
     {
@@ -59,7 +59,7 @@ namespace FirstPersonTennis
         public float techniqueAimMarginAtMax;
         [Tooltip("기술 100일 때 스핀 증가 (비율)")]
         public float techniqueSpinAtMax;
-        [Tooltip("속도 100일 때 걷기·달리기 속도 증가 (비율). 좌우로 흔드는 공을 따라가는 힘이 이 차이에서 나온다")]
+        [Tooltip("속도 0이 기본 걷기·달리기 속도, 100일 때 속도 증가 (비율). 좌우로 흔드는 공을 따라가는 힘이 이 차이에서 나온다")]
         public float speedMoveAtMax;
         [Tooltip("속도 100일 때 스테미너 회복 증가 (비율)")]
         public float speedRecoveryAtMax;
@@ -70,7 +70,7 @@ namespace FirstPersonTennis
         {
             powerSpeedAtMax = 0.1f, // 1포인트당 0.2%
             techniqueErrorAtMax = 0.4f, techniqueSpinAtMax = 0.25f, techniqueAimMarginAtMax = 0.8f,
-            speedMoveAtMax = 0.1f, speedRecoveryAtMax = 0.25f, speedSlideAtMax = 0.5f,
+            speedMoveAtMax = 0.15f, speedRecoveryAtMax = 0.25f, speedSlideAtMax = 0.5f, // 이동 1포인트당 0.15%
         };
     }
 
@@ -103,7 +103,7 @@ namespace FirstPersonTennis
                 ErrorScale = Mathf.Max(0.1f, 1f - Level(c.technique) * t.techniqueErrorAtMax),
                 SpinScale = Mathf.Max(0.1f, 1f + Level(c.technique) * t.techniqueSpinAtMax),
                 AimMarginScale = Mathf.Max(0.1f, 1f - Level(c.technique) * t.techniqueAimMarginAtMax),
-                MoveScale = Mathf.Max(0.1f, 1f + Level(c.speed) * t.speedMoveAtMax),
+                MoveScale = Mathf.Max(0.1f, 1f + Mathf.Clamp(c.speed, 0, CharacterPreset.MaxStat) / (float)CharacterPreset.MaxStat * t.speedMoveAtMax),
                 RecoveryScale = Mathf.Max(0.1f, 1f + Level(c.speed) * t.speedRecoveryAtMax),
                 SlideScale = Mathf.Max(0f, 1f - Level(c.speed) * t.speedSlideAtMax),
             };

@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace FirstPersonTennis.Tests
 {
-    // 프리셋 선수와 스탯: 효과는 ±15% 안, 속도 스탯이 가장 좁고, 힘이 세도 샷은 목표로 계획된다.
+    // 이동속도는 스탯 0이 기본값이며, 다른 스탯 효과는 기존 기준을 유지한다.
     public class CharacterTests
     {
         static readonly CharacterPreset[] Roster = CharacterPreset.DefaultRoster();
@@ -21,18 +21,18 @@ namespace FirstPersonTennis.Tests
         }
 
         [Test]
-        public void BalancedCharacterPlaysLikeTheBaseline()
+        public void BalancedCharacterHasMovementBonusAndOtherBaselineEffects()
         {
             PlayerStats s = StatsOf(Named("균형형"));
             Assert.AreEqual(1f, s.PowerScale, 1e-5f);
             Assert.AreEqual(1f, s.ErrorScale, 1e-5f);
             Assert.AreEqual(1f, s.SpinScale, 1e-5f);
-            Assert.AreEqual(1f, s.MoveScale, 1e-5f);
+            Assert.AreEqual(1.075f, s.MoveScale, 1e-5f);
             Assert.AreEqual(1f, s.RecoveryScale, 1e-5f);
             Assert.AreEqual(1f, s.SlideScale, 1e-5f);
         }
 
-        // 스탯 100이면 정한 만큼, 0이면 같은 만큼 반대로. 기술의 오차 효과가 가장 넓다.
+        // 스탯 100이면 정한 만큼. 이동속도는 0에서 기본값, 다른 효과는 50에서 기본값이다.
         [Test]
         public void EffectsScaleWithTheStatAndTechniqueIsWidest()
         {
@@ -43,7 +43,7 @@ namespace FirstPersonTennis.Tests
             Assert.AreEqual(1f - t.techniqueErrorAtMax, top.ErrorScale, 1e-5f);
             Assert.AreEqual(1f + t.techniqueErrorAtMax, bottom.ErrorScale, 1e-5f);
             Assert.AreEqual(1f + t.speedMoveAtMax, top.MoveScale, 1e-5f);
-            Assert.AreEqual(1f - t.speedMoveAtMax, bottom.MoveScale, 1e-5f);
+            Assert.AreEqual(1f, bottom.MoveScale, 1e-5f);
 
             Assert.Less(t.speedMoveAtMax, t.techniqueErrorAtMax);
             Assert.Less(t.powerSpeedAtMax, t.techniqueErrorAtMax);
@@ -52,6 +52,19 @@ namespace FirstPersonTennis.Tests
             PlayerStats over = StatsOf(new CharacterPreset { power = 150, technique = -20, speed = 50 });
             Assert.AreEqual(top.PowerScale, over.PowerScale, 1e-5f);
             Assert.AreEqual(bottom.ErrorScale, over.ErrorScale, 1e-5f);
+        }
+
+        [TestCase(-20, 1f)]
+        [TestCase(0, 1f)]
+        [TestCase(50, 1.05f)]
+        [TestCase(100, 1.1f)]
+        [TestCase(150, 1.1f)]
+        public void MovementStartsAtZeroAndClampsTheStat(int speed, float expected)
+        {
+            StatTuning tuning = StatTuning.Default;
+            tuning.speedMoveAtMax = 0.1f;
+            PlayerStats stats = PlayerStats.From(new CharacterPreset { speed = speed }, tuning);
+            Assert.AreEqual(expected, stats.MoveScale, 1e-5f);
         }
 
         [Test]

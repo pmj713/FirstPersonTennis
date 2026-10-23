@@ -124,6 +124,44 @@ namespace FirstPersonTennis.Tests
             Assert.Less(i.Depth, 0.1f);
         }
 
+        // 드롭샷도 짧게 비스듬히 끌면 코너 끝까지 노린다 (길이가 짧아도 방향은 각도로)
+        [TestCase(-1f)]
+        [TestCase(1f)]
+        public void ShortDiagonalDragDownIsDropShotToTheCorner(float side)
+        {
+            ShotIntent i = ShotGestureInput.Classify(new Vector2(0.07f * side, -0.06f), 0f);
+            Assert.AreEqual(ShotType.Slice, i.Type);
+            Assert.Less(i.Depth, 0.1f, "드롭샷 길이");
+            Assert.Greater(i.Aim * side, 0.95f, "코너 끝까지");
+
+            ShotIntent half = ShotGestureInput.Classify(new Vector2(0.035f * side, -0.06f), 0f);
+            Assert.AreEqual(ShotType.Slice, half.Type);
+            Assert.That(half.Aim * side, Is.InRange(0.5f, 0.75f), "덜 기울이면 덜 간다");
+        }
+
+        [Test]
+        public void ShortStraightDragDownStillGoesToTheCenter()
+        {
+            ShotIntent i = ShotGestureInput.Classify(new Vector2(0.02f, -0.06f), 0f);
+            Assert.AreEqual(ShotType.Slice, i.Type);
+            Assert.AreEqual(0f, i.Aim, "데드존 안의 손 떨림은 가운데");
+        }
+
+        // 계획한 드롭샷이 좌우 끝 목표에 실제로 떨어진다
+        [TestCase(-1f)]
+        [TestCase(1f)]
+        public void AimedDropShotLandsShortNearTheSideline(float aim)
+        {
+            var config = TestConfig.Create();
+            var from = new Vector3(0.5f, 1f, -12.3f);
+            ShotSolution s = ShotPlanner.Plan(config, new ShotIntent { Type = ShotType.Slice, Aim = aim, Depth = 0f }, from, -1);
+            Assert.IsTrue(s.Success, $"landing {s.Landing}");
+            Assert.Less(s.Landing.z, 4f, "네트 가까이");
+            Assert.Greater(s.Landing.x * aim, Court.SinglesHalfWidth * 0.6f, "옆줄 쪽");
+            Assert.IsTrue(Court.IsInSingles(s.Landing, 1), $"landing {s.Landing}");
+            TestConfig.Destroy(config);
+        }
+
         [Test]
         public void DragUpIsLob()
         {

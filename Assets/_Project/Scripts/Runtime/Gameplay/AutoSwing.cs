@@ -69,11 +69,20 @@ namespace FirstPersonTennis
         public float PredictedApex { get; private set; } // 남은 궤적의 최고 높이
         public ShotRecord LastShot { get; private set; }
 
+        // 복식: 같은 팀 선수 (MatchReferee가 정함, 단식이면 null). 한 공은 한 명만 친다
+        public AutoSwing Teammate { get; set; }
+        // 복식: 서브는 정해진 리시버만 받는다. 리시버의 파트너는 서브를 치지 않는다
+        public bool MayReturnServe { get; set; } = true;
+        public bool WantsBall { get; private set; }     // 이번 공을 칠 생각이 있다 (선입력·자동 스트로크)
+        public float ContactReach { get; private set; } // 예상 타점이 몸에서 옆으로 떨어진 거리
+        public string LastWhiffReason { get; private set; } = ""; // 마지막 헛스윙 이유 (HUD)
+
         // 네트~서비스라인 사이: 바운드 전에 닿으면 발리
         public bool InVolleyZone => transform.position.z * side <= Court.ServiceLine;
 
         public event Action<bool> SwingResolved; // true = 맞힘, false = 헛스윙
         public event Action<ShotQuality> Struck;  // 친 공의 타구 품질 (서브 포함)
+        public event Action Hit;                  // 이 선수가 공을 쳤다 (서브·연습 공 포함). 복식에서 팀원의 샷과 구분한다
 
         IShotIntentSource source;
         IMover mover;
@@ -113,7 +122,7 @@ namespace FirstPersonTennis
 
         void Update()
         {
-            HasContact = HasLanding = ContactInHitZone = ContactInSwingZone = ContactIsVolley = false;
+            HasContact = HasLanding = ContactInHitZone = ContactInSwingZone = ContactIsVolley = WantsBall = false;
             if (!Incoming)
             {
                 PredictedApex = 0f;
@@ -141,8 +150,14 @@ namespace FirstPersonTennis
                 if (ball.StepIndex > impactStep)
                 {
                     IsSwinging = false; // 임팩트 스텝을 놓쳤다 (포인트 리셋 등)
+                    LastWhiffReason = "";
                     SwingResolved?.Invoke(false);
                 }
+                return;
+            }
+            if (ball.IsServe && !MayReturnServe)
+            {
+                if (racket != null) racket.SetPreparation(StrokeSide.Forehand, ShotType.Topspin, 0f);
                 return;
             }
 
@@ -157,6 +172,7 @@ namespace FirstPersonTennis
                 auto = true;
             }
             if (skip) hasIntent = false;
+            WantsBall = hasIntent;
             bool smash = hasIntent && intent.Type == ShotType.Smash;
 
             if (!FindContact(smash, out int index, out bool volley))
@@ -173,6 +189,7 @@ namespace FirstPersonTennis
             Evaluate(point, smash, out bool inHit, out bool inSwing, out float lateral);
             ContactInHitZone = inHit;
             ContactInSwingZone = inSwing;
+            ContactReach = Mathf.Abs(lateral);
             PredictedStroke = lateral >= 0f ? StrokeSide.Forehand : StrokeSide.Backhand;
 
             if (racket != null)
@@ -182,8 +199,28 @@ namespace FirstPersonTennis
             }
 
             int windupSteps = Mathf.CeilToInt(config.swingWindup * ball.TimeScale / BallPhysics.Step);
-            if (hasIntent && inSwing && index >= 1 && index <= windupSteps)
+            if (hasIntent && inSwing && index >= 1 && index <= windupSteps && !YieldToTeammate())
                 StartSwing(intent, volley, auto, ball.StepIndex + index, TimeToContact);
+        }
+
+        // 복식 스윙 충돌: 팀원이 이미 이 공에 스윙했으면 내 입력은 취소된다. 둘 다 칠 수 있으면 타점에 더 가까운 쪽이 치고,
+        // 거리가 같으면 포핸드로 치는 쪽, 그래도 같으면 왼쪽 선수(가운데 공을 포핸드로 받는 자리)가 친다
+        bool YieldToTeammate()
+        {
+            AutoSwing mate = Teammate;
+            if (mate == null || !mate.isActiveAndEnabled) return false;
+            if (mate.IsSwinging)
+            {
+                source?.OnSwingCommitted();
+                return true;
+            }
+            if (!mate.WantsBall || !mate.HasContact || !mate.ContactInSwingZone) return false;
+            const float Tie = 0.1f;
+            if (mate.ContactReach < ContactReach - Tie) return true;
+            if (mate.ContactReach > ContactReach + Tie) return false;
+            bool mateForehand = mate.PredictedStroke == StrokeSide.Forehand, myForehand = PredictedStroke == StrokeSide.Forehand;
+            if (mateForehand != myForehand) return mateForehand;
+            return transform.position.x * Facing > mate.transform.position.x * Facing;
         }
 
         // ── 서브 ──────────────────────────────────────────────
@@ -221,6 +258,7 @@ namespace FirstPersonTennis
             if (racket != null) racket.PlayServe(type);
             LastShot = new ShotRecord { Intent = new ShotIntent { Aim = aim }, Contact = contact, Serve = true, ServeType = type };
             ball.LaunchServe(side, velocity, spin, toDeuce);
+            Hit?.Invoke();
             SwingResolved?.Invoke(true);
             Struck?.Invoke(new ShotQuality
             {
@@ -350,10 +388,28 @@ namespace FirstPersonTennis
             IsSwinging = false;
 
             Vector3 contact = ball.State.Position;
-            Evaluate(contact, lockedIntent.Type == ShotType.Smash, out bool inHit, out _, out float lateral);
+            bool smash = lockedIntent.Type == ShotType.Smash;
+            Evaluate(contact, smash, out bool inHit, out _, out float lateral);
             bool hit = Incoming && inHit;
             if (hit) Strike(lockedIntent, contact, lateral, true, lockedVolley, lockedAuto);
+            else LastWhiffReason = WhiffReason(contact, smash);
             SwingResolved?.Invoke(hit);
+        }
+
+        // 헛스윙 이유 (HUD): 임팩트 순간 공이 타격 범위를 어느 쪽으로 벗어났는지
+        string WhiffReason(Vector3 point, bool smash)
+        {
+            if (!Incoming) return "";
+            Vector3 body = transform.position;
+            float lateral = Mathf.Abs((point.x - body.x) * Facing);
+            float forward = (point.z - body.z) * Facing - config.contactForward;
+            float depthTolerance = smash ? config.smashDepthTolerance : config.contactDepthTolerance;
+            if (point.y > (smash ? config.smashReachHeight : config.maxHitHeight)) return $"공이 너무 높음 ({point.y:0.0}m)";
+            if (point.y < config.minHitHeight) return "공이 너무 낮음";
+            if (lateral > (smash ? config.smashHitReach : config.hitReach)) return $"공이 몸에서 멂 (옆으로 {lateral:0.0}m)";
+            if (forward < -depthTolerance) return "공이 몸 뒤로 지나감";
+            if (forward > depthTolerance) return "공이 아직 앞에 있음";
+            return "";
         }
 
         void StartSwing(ShotIntent intent, bool volley, bool auto, long step, float timeToImpact)
@@ -393,6 +449,7 @@ namespace FirstPersonTennis
             bool overhead = intent.Type == ShotType.Smash && contact.y >= config.smashMinHeight;
             LastShot = new ShotRecord { Intent = intent, Contact = contact, Volley = volley, Auto = auto };
             ball.Launch(side, velocity, spin, overhead ? config.smashTempoBoost : 1f);
+            Hit?.Invoke();
             if (withError) Struck?.Invoke(quality);
         }
 
@@ -483,7 +540,7 @@ namespace FirstPersonTennis
         bool IsGoodBounce(Vector3 p)
         {
             if (Court.SideOf(p.z) != side) return false;
-            return ball.IsServe ? Court.IsInServiceBox(p, side, ball.ServeToDeuce) : Court.IsInSingles(p, side);
+            return ball.IsServe ? Court.IsInServiceBox(p, side, ball.ServeToDeuce) : Court.IsInPlay(p, side);
         }
 
         // 우선순위: 공중 스매시 > (네트 앞) 발리 > 바운드 후 스트로크 > (바운드를 기다릴 수 없으면) 발리

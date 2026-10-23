@@ -33,6 +33,9 @@ namespace FirstPersonTennis
         [Header("카메라")]
         [Tooltip("16:9 화면 기준 수평 시야각. 넓을수록 주변이 보이지만 코트가 길쭉하고 멀어 보인다.")]
         [Range(50f, 110f)] public float horizontalFov = 75f;
+        [Tooltip("복식에서 우리 코트 쪽에서 파트너가 받거나 친 공일 때, 상대 코트 쪽에서 공 쪽으로 고개를 돌리는 정도. " +
+                 "0 = 상대 코트만 봄, 1 = 공을 끝까지 따라봄. 상대 코트 위의 공과 나에게 오는 공은 늘 끝까지 따라본다")]
+        [Range(0f, 1f)] public float doublesBallFollow = 0.4f;
 
         [Header("스테미너")]
         [Tooltip("가득 찬 스테미너로 달릴 수 있는 거리 (m, ITF 규격 코트 기준). 단식 중앙→사이드라인 4.1m + 여유. " +
@@ -84,6 +87,9 @@ namespace FirstPersonTennis
         public float swingWindup = 0.25f;
         [Tooltip("임팩트 몇 초 전부터 라켓을 뒤로 빼기 시작하는지")]
         public float takeBackLead = 0.9f;
+        [Tooltip("스윙을 시작하면 이 감속으로 발을 멈춘다 (m/s²). 스윙 중에는 이동 입력을 받지 않는다. " +
+                 "몸이 공을 지나쳐 헛스윙하는 것을 막는다 (달리기 10 m/s면 약 0.08초, 0.4m 만에 멈춤). 0이면 멈추지 않는다 (예전처럼)")]
+        [Min(0f)] public float swingPlantDeceleration = 120f;
 
         [Header("템포")]
         [Tooltip("공의 시간 배율. 공의 물리만 이만큼 느리게 진행한다. 궤적은 실제 테니스 그대로 낮게 유지되고 " +
@@ -95,7 +101,7 @@ namespace FirstPersonTennis
                  "낮추면 깊은 공을 보내려고 공이 높이 뜨므로, 템포는 공의 시간 배율로 조절하는 걸 권장.")]
         [Range(0.5f, 1.2f)] public float shotSpeedScale = 1f;
         public ShotProfile topspin = new ShotProfile { speed = 32f, shortSpeed = 32f, spin = 160f, minDepth = 7f, maxDepth = 9.3f };
-        public ShotProfile slice = new ShotProfile { speed = 24f, shortSpeed = 11f, spin = -150f, minDepth = 2.2f, maxDepth = 9.5f };
+        public ShotProfile slice = new ShotProfile { speed = 28f, shortSpeed = 11f, spin = -150f, minDepth = 2.2f, maxDepth = 9.5f };
         public ShotProfile lob = new ShotProfile { spin = 120f, minDepth = 8.5f, maxDepth = 10.8f, launchAngle = 50f };
         public ShotProfile smash = new ShotProfile { speed = 34f, shortSpeed = 34f, spin = 40f, minDepth = 7f, maxDepth = 9f };
         [Tooltip("좌우로 최대한 밀었을 때 목표 지점이 단식 사이드라인에서 안쪽으로 떨어진 거리 (m)")]
@@ -149,7 +155,7 @@ namespace FirstPersonTennis
         [Range(0f, 0.5f)] public float aimErrorPenalty = 0.1f;
 
         [Header("선수")]
-        [Tooltip("프리셋 선수 목록. 스탯은 0~100 (기준 50), 효과는 아래 statTuning (스탯 100일 때 바뀌는 비율)")]
+        [Tooltip("프리셋 선수 목록. 스탯은 0~100 (이동속도 효과 기준 0, 나머지 효과 기준 50), 효과는 아래 statTuning (스탯 100일 때 바뀌는 비율)")]
         public CharacterPreset[] characters = CharacterPreset.DefaultRoster();
         public StatTuning statTuning = StatTuning.Default;
         [Tooltip("시작 메뉴에서 처음 골라져 있는 내 선수 (characters 순서)")]

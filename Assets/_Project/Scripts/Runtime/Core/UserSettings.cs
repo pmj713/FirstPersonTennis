@@ -15,6 +15,8 @@ namespace FirstPersonTennis
         static readonly Setting deadZone = new Setting("DragDeadZone");
         static readonly Setting turnSpeed = new Setting("CameraTurnSpeed");
         static readonly Setting fov = new Setting("HorizontalFov");
+        static readonly Setting music = new Setting("MusicVolume");
+        static readonly Setting crowd = new Setting("CrowdVolume");
 
         // 드래그 감도: 드래그 길이에 곱한다. 클수록 짧게 끌어도 같은 구질·방향이 나온다
         public static float DragSensitivity
@@ -42,9 +44,23 @@ namespace FirstPersonTennis
 
         public static void SetHorizontalFov(float value) => fov.Set(Mathf.Clamp(value, MinFov, MaxFov));
 
+        // 배경음악 크기 배율 (0 = 끔, 1 = 곡을 만든 크기)
+        public static float MusicVolume
+        {
+            get => music.Get(1f);
+            set => music.Set(Mathf.Clamp01(value));
+        }
+
+        // 경기장 소리(관중·심판 콜·선수 기합) 크기 배율 (0 = 끔, 1 = 기본)
+        public static float CrowdVolume
+        {
+            get => crowd.Get(1f);
+            set => crowd.Set(Mathf.Clamp01(value));
+        }
+
         public static void ResetToDefaults()
         {
-            foreach (Setting s in new[] { sensitivity, deadZone, turnSpeed, fov }) s.Reset();
+            foreach (Setting s in new[] { sensitivity, deadZone, turnSpeed, fov, music, crowd }) s.Reset();
             PlayerPrefs.Save();
         }
 

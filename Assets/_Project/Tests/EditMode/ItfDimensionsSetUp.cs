@@ -8,7 +8,10 @@ namespace FirstPersonTennis.Tests
     public class ItfDimensionsSetUp
     {
         [OneTimeSetUp]
-        public void UseItfDimensions()
+        public void UseItfDimensions() => Apply();
+
+        // 씬을 여는 테스트는 공이 설정 파일 값을 전역에 적용하므로, 닫은 뒤 이걸로 되돌린다
+        public static void Apply()
         {
             Court.Configure(1f, 1f);
             Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);

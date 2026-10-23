@@ -43,6 +43,7 @@ namespace FirstPersonTennis.Tests
             Time.captureDeltaTime = 0f;
             Time.timeScale = 1f;
             Court.SetSurface(CourtType.Hard, SurfaceProfile.Hard);
+            Court.SetDoubles(false);
         }
 
         IEnumerator PlayUntilOver(float timeout)
@@ -86,6 +87,47 @@ namespace FirstPersonTennis.Tests
 
             referee.ShowMenu();
             Assert.IsFalse(referee.NearAi.gameObject.activeSelf, "메뉴로 돌아가면 관전용 AI를 끈다");
+        }
+
+        // 복식 AI 4명: 경기가 끝까지 가고, 네 명 모두 서브하고 공을 치며, 한 팀이 같은 공을 두 번 치지 않는다
+        [UnityTest]
+        public IEnumerator DoublesWatchMatchPlaysToTheEnd()
+        {
+            yield return LoadMatch(CourtType.Hard);
+            referee.SetCharacters(0, 0, 0, 0);
+            referee.StartWatch(new MatchRules { format = MatchFormat.TiebreakOnly, doubles = true }, AiDifficulty.Normal);
+            Assert.IsTrue(referee.Doubles);
+            Assert.IsTrue(Court.Doubles);
+            Assert.IsTrue(referee.Partner.gameObject.activeSelf && referee.Ai2.gameObject.activeSelf, "복식 선수를 켠다");
+
+            var hits = new Dictionary<string, int>();
+            foreach ((string name, AiOpponent athlete) in new[] { ("가까운 1", referee.NearAi), ("가까운 2", referee.Partner), ("먼 1", referee.Ai), ("먼 2", referee.Ai2) })
+            {
+                hits[name] = 0;
+                athlete.GetComponent<AutoSwing>().Hit += () => hits[name]++;
+            }
+            int lastHitter = 0, doubleHits = 0;
+            referee.Ball.Held += () => lastHitter = 0;
+            referee.Ball.Launched += side =>
+            {
+                if (side == 0) return; // 토스
+                if (side == lastHitter) doubleHits++;
+                lastHitter = side;
+            };
+            var servers = new HashSet<string>();
+            referee.PointEnded += (_, __) => servers.Add(referee.ServerName);
+
+            yield return PlayUntilOver(1500f);
+
+            Debug.Log($"[Doubles] 타이브레이크 {referee.Score.LastTiebreakPoints} · 서버 {string.Join(", ", servers)} · " +
+                      $"타격 {string.Join(", ", System.Linq.Enumerable.Select(hits, h => $"{h.Key} {h.Value}"))} · 발리 {nearVolleys}:{farVolleys}");
+            Assert.AreEqual(0, doubleHits, "한 팀이 같은 공을 두 번 침");
+            Assert.AreEqual(4, servers.Count, $"네 명 모두 서브해야 함: {string.Join(", ", servers)}");
+            foreach (var h in hits) Assert.Greater(h.Value, 0, $"{h.Key}가 한 번도 치지 않음");
+
+            referee.ShowMenu();
+            Assert.IsFalse(referee.Partner.gameObject.activeSelf, "메뉴로 돌아가면 복식 선수를 끈다");
+            Assert.IsFalse(Court.Doubles);
         }
 
         // 어려움 난이도 + 잔디: 서브 앤 발리와 네트 대시가 실제로 나온다

@@ -19,6 +19,7 @@ namespace FirstPersonTennis
         public const float LobThreshold = 0.08f;   // 로브는 실수로 나가면 치명적이라 더 길게 밀어야 한다
         public const float MinVerticalAngle = 25f; // 이보다 눕힌 드래그는 좌우 방향으로만 본다 (도)
         public const float FullAim = 0.25f;
+        public const float FullAimAngle = 50f;     // 슬라이스·로브: 수직에서 이만큼 기울이면 코너 끝까지 (도)
         public const float FullDepth = 0.3f;
         public const float SmashStroke = 0.08f;
 
@@ -109,13 +110,25 @@ namespace FirstPersonTennis
             {
                 intent.Type = ShotType.Slice;
                 intent.Depth = Mathf.Clamp01((-delta.y - SliceThreshold) / (FullDepth - SliceThreshold));
+                intent.Aim = VerticalShotAim(intent.Aim, delta);
             }
             else if (steep && delta.y >= LobThreshold)
             {
                 intent.Type = ShotType.Lob;
                 intent.Depth = Mathf.Clamp01((delta.y - LobThreshold) / (FullDepth - LobThreshold));
+                intent.Aim = VerticalShotAim(intent.Aim, delta);
             }
             return intent;
+        }
+
+        // 슬라이스·로브는 방향을 드래그 각도로도 본다: 아래(위)로 짧게 끄는 드롭샷·짧은 로브는 옆으로 많이 끌면
+        // 눕혀져 탑스핀이 되므로, 길이만으로는 코너까지 노릴 수 없었다. 똑바로 = 가운데, FullAimAngle만큼 기울이면 끝까지.
+        // 길이로 본 값과 각도로 본 값 중 큰 쪽이라 긴 드래그는 예전과 같다. 데드존 안이면 그대로 가운데
+        static float VerticalShotAim(float lengthAim, Vector2 delta)
+        {
+            if (lengthAim == 0f) return 0f;
+            float angle = Mathf.Atan2(Mathf.Abs(delta.x), Mathf.Abs(delta.y)) * Mathf.Rad2Deg;
+            return Mathf.Sign(delta.x) * Mathf.Max(Mathf.Abs(lengthAim), Mathf.Clamp01(angle / FullAimAngle));
         }
 
         public bool TryGetIntent(out ShotIntent intent)

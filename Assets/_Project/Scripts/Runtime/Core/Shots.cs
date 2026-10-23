@@ -240,7 +240,8 @@ namespace FirstPersonTennis
                 case ShotType.Slice:
                     p = config.slice;
                     depth = Mathf.Lerp(p.minDepth, p.maxDepth, depth01);
-                    speed = Mathf.Lerp(p.shortSpeed, p.speed, depth01);
+                    // 짧게 칠수록 느려지되 드롭샷 쪽에서 크게 느려진다: 중간 길이 슬라이스도 낮고 빠르게 깔린다
+                    speed = Mathf.Lerp(p.shortSpeed, p.speed, Mathf.Sqrt(depth01));
                     break;
                 case ShotType.Lob:
                     p = config.lob;
@@ -274,7 +275,7 @@ namespace FirstPersonTennis
             float spin = p.spin * pace * pace * spinScale;
 
             depth *= Court.LengthScale; // 구질별 깊이는 ITF 길이 기준
-            float maxAimX = Court.SinglesHalfWidth - config.aimMargin * aimMarginScale;
+            float maxAimX = Court.PlayHalfWidth - config.aimMargin * aimMarginScale;
             var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
             if (p.launchAngle > 0f)
                 return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, Court.Surface);
@@ -309,7 +310,7 @@ namespace FirstPersonTennis
 
             float pace = config.shotSpeedScale > 0f ? config.shotSpeedScale : 1f;
             depth *= Court.LengthScale;
-            float maxAimX = Court.SinglesHalfWidth - config.aimMargin * aimMarginScale;
+            float maxAimX = Court.PlayHalfWidth - config.aimMargin * aimMarginScale;
             var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
             return ShotSolver.SolveDrive(contact, target, speed * pace * power, p.spin * pace * pace * spinScale, Court.Surface, -25f);
         }

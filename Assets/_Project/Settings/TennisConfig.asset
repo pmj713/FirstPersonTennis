@@ -64,8 +64,10 @@ MonoBehaviour:
   walkSpeed: 4
   runSpeed: 10
   acceleration: 30
+  backwardSpeedScale: 0.6
   eyeHeight: 1.7
   horizontalFov: 75
+  doublesBallFollow: 0.4
   sprintDistance: 5
   staminaRecoveryPerSecond: 0.3
   staminaResumeThreshold: 0.5
@@ -87,6 +89,7 @@ MonoBehaviour:
   smashTempoBoost: 1.5
   swingWindup: 0.25
   takeBackLead: 0.9
+  swingPlantDeceleration: 120
   ballTimeScale: 0.8
   shotSpeedScale: 1
   topspin:
@@ -98,8 +101,8 @@ MonoBehaviour:
     launchAngle: 0
     sideSpin: 0
   slice:
-    speed: 24
-    shortSpeed: 11
+    speed: 32
+    shortSpeed: 32
     spin: -150
     minDepth: 2.2
     maxDepth: 9.5
@@ -279,6 +282,7 @@ MonoBehaviour:
   defaultRules:
     format: 2
     noAd: 0
+    doubles: 0
   defaultDifficulty: 1
   pointResetDelay: 1.6
   faultDelay: 1.1

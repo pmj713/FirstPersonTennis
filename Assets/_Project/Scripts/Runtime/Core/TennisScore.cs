@@ -12,6 +12,8 @@ namespace FirstPersonTennis
         public MatchFormat format;
         [Tooltip("듀스에서 다음 1점으로 게임을 결정")]
         public bool noAd;
+        [Tooltip("복식 (팀마다 두 명, 복식 코트). 점수 규칙은 단식과 같다")]
+        public bool doubles;
 
         public int GamesPerSet => format == MatchFormat.ShortSet ? 4 : 6;
         public int SetsToWin => format == MatchFormat.BestOfThree ? 2 : 1;

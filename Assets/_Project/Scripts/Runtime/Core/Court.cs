@@ -82,12 +82,28 @@ namespace FirstPersonTennis
         public static float Facing(int side) => -side;
 
         // 단식 코트 안에 떨어졌는지. 라인에 닿으면 인.
-        public static bool IsInSingles(Vector3 point, int side)
+        public static bool IsInSingles(Vector3 point, int side) => IsInside(point, side, SinglesHalfWidth);
+
+        // 복식 코트 안 (양옆 복식 앨리까지)
+        public static bool IsInDoubles(Vector3 point, int side) => IsInside(point, side, DoublesHalfWidth);
+
+        static bool IsInside(Vector3 point, int side, float halfWidth)
         {
-            if (Mathf.Abs(point.x) > SinglesHalfWidth + LineTolerance) return false;
+            if (Mathf.Abs(point.x) > halfWidth + LineTolerance) return false;
             float depth = point.z * side;
             return depth > 0f && depth <= HalfLength + LineTolerance;
         }
+
+        // 지금 경기가 복식인지. 랠리 판정과 샷 목표 너비가 복식 코트(앨리 포함)로 바뀐다. 서브 박스는 단식과 같다
+        public static bool Doubles { get; private set; }
+
+        public static void SetDoubles(bool doubles) => Doubles = doubles;
+
+        // 랠리 중 공이 들어간 것으로 보는 코트
+        public static bool IsInPlay(Vector3 point, int side) => Doubles ? IsInDoubles(point, side) : IsInSingles(point, side);
+
+        // 샷이 노리는 코트의 절반 너비
+        public static float PlayHalfWidth => Doubles ? DoublesHalfWidth : SinglesHalfWidth;
 
         // 리시버 쪽 서비스 박스 (x 범위, 네트에서의 깊이 범위). 듀스 코트 = 리시버 기준 오른쪽.
         public static void ServiceBox(int receiverSide, bool deuce, out float xMin, out float xMax)

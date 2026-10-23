@@ -41,6 +41,36 @@ namespace FirstPersonTennis.Tests
             Assert.Greater(top.Velocity.z, back.Velocity.z);
         }
 
+        // 드롭샷처럼 느리고 백스핀이 많은 공은 바운드에서 죽는다 (낮게 튀고 앞으로 거의 안 감). 빠른 슬라이스는 그대로 미끄러져 간다
+        [Test]
+        public void DropShotDiesOnTheBounceButFastSliceRunsOn()
+        {
+            var inside = new Vector3(0.8f, 1f, -7f);
+            (float apex, float travel) drop = AfterBounce(inside, ShotSolver.SolveDrive(inside, new Vector3(3f, 0f, 2.2f), 11f, -150f, Hard));
+            var baseline = new Vector3(0.8f, 1f, -12.2f);
+            (float apex, float travel) slice = AfterBounce(baseline, ShotSolver.SolveDrive(baseline, new Vector3(0f, 0f, 9.5f), 28f, -150f, Hard));
+
+            Assert.Less(drop.apex, 0.5f, "드롭샷은 낮게 튄다");
+            Assert.Less(drop.travel, 1.5f, "드롭샷은 두 번째 바운드까지 앞으로 거의 안 간다");
+            Assert.Greater(slice.travel, 5f, "빠른 슬라이스는 바운드 뒤에도 앞으로 간다");
+        }
+
+        // 첫 바운드 뒤 최고 높이와 두 번째 바운드까지 앞으로 간 거리
+        static (float apex, float travel) AfterBounce(Vector3 from, ShotSolution shot)
+        {
+            var s = new BallState(from, shot.Velocity, shot.Spin);
+            float apex = 0f, firstZ = 0f;
+            int bounces = 0;
+            for (int i = 0; i < 6000; i++)
+            {
+                if (BallPhysics.Integrate(ref s, Hard).Bounced && ++bounces == 1) firstZ = s.Position.z;
+                if (bounces == 2) break;
+                if (bounces == 1) apex = Mathf.Max(apex, s.Position.y);
+            }
+            Assert.AreEqual(2, bounces, "두 번 튀어야 함");
+            return (apex, Mathf.Abs(s.Position.z - firstZ));
+        }
+
         [Test]
         public void TopspinDipsShorterThanFlat()
         {

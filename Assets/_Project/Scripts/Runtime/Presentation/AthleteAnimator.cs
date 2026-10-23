@@ -101,6 +101,8 @@ namespace FirstPersonTennis
         Clip clip;
         float time, weight, preContactRate;
         float yaw, yawVelocity;
+        Quaternion racketRest;
+        Vector3 racketRestPosition;
         Quaternion modelRest; // 모델이 루트 앞을 보는 기본 회전
         int gripLeft = -1;
         float leftGrip = 1f;
@@ -117,6 +119,7 @@ namespace FirstPersonTennis
         void Awake()
         {
             mover = GetComponent<IMover>();
+            if (racket != null) { racketRest = racket.localRotation; racketRestPosition = racket.localPosition; }
             if (model != null) modelRest = model.localRotation;
             bodyLayer = animator.GetLayerIndex(SwingBodyLayer);
             upperLayer = animator.GetLayerIndex(SwingUpperLayer);
@@ -157,9 +160,26 @@ namespace FirstPersonTennis
                 {
                     if (Animator.StringToHash(asset.name) != c.Hash || sweetAtContact.ContainsKey(c.Hash)) continue;
                     asset.SampleAnimation(model.gameObject, c.Contact); // 다음 프레임에 애니메이터가 덮어쓴다
+                    ApplyGroundstrokeGrip(c, c.Contact, 1f);
                     sweetAtContact[c.Hash] = hips.InverseTransformPoint(SweetSpot());
                 }
             }
+            ApplyGroundstrokeGrip(default, 0f, 0f);
+        }
+
+        // Preserve the grasp point when changing the groundstroke grip.
+        // Backhand lays the handle diagonally across the palm; other shots keep their grip.
+        void ApplyGroundstrokeGrip(Clip active, float seconds, float blend)
+        {
+            if (racket == null) return;
+            bool forehand = active.Hash == Forehand.Hash, backhand = active.Hash == Backhand.Hash;
+            float frame = seconds * Fps;
+            float t = forehand || backhand ? Mathf.Clamp01(Mathf.Min(frame / 8f, (48f - frame) / 8f)) : 0f;
+            t = t * t * (3f - 2f * t) * blend;
+            Quaternion diagonal = Quaternion.AngleAxis(backhand ? -45f * t : 0f, Vector3.forward);
+            racket.localRotation = racketRest * diagonal * Quaternion.AngleAxis((backhand ? -20f : 90f) * t, Vector3.up);
+            Vector3 grasp = racketRestPosition + racketRest * (Vector3.up * 0.09f);
+            racket.localPosition = grasp - racket.localRotation * (Vector3.up * 0.09f);
         }
 
         Vector3 SweetSpot() => racket.position + racket.up * sweetSpot;
@@ -307,6 +327,7 @@ namespace FirstPersonTennis
         // 애니메이터가 뼈를 움직인 뒤(LateUpdate)에 덮어쓴다.
         void LateUpdate()
         {
+            ApplyGroundstrokeGrip(clip, time, weight);
             float w = ReachWeight();
             Vector3 shift = Vector3.zero;
             if (model != null) model.localPosition = Vector3.zero; // 지난 프레임에 옮긴 몸을 되돌리고 잰다

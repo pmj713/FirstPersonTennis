@@ -45,6 +45,10 @@ namespace FirstPersonTennis
         const float RollThreshold = 0.4f;    // 이보다 느리게 닿으면 튀지 않고 구른다
         const float RollingDecay = 0.5f;
         const float NetCordBand = 0.04f;     // 네트 상단 위 이 높이 안으로 지나가면 스친다
+        // 백스핀으로 죽는 바운드 (BackspinCheck): 백스핀 비율이 CheckStart부터 죽기 시작해 CheckFull에서 다 죽는다.
+        // 다 죽으면 튀는 높이(수직 속도)는 CheckedBounce배, 앞으로 가는 속도는 CheckedSpeed배
+        const float CheckStart = 0.35f, CheckFull = 0.7f;
+        const float CheckedBounce = 0.5f, CheckedSpeed = 0.35f;
 
         static readonly float AeroK = 0.5f * AirDensity * Mathf.PI * RealRadius * RealRadius / Mass;
         static readonly Vector3 Gravity = new Vector3(0f, -9.81f, 0f);
@@ -128,6 +132,7 @@ namespace FirstPersonTennis
         {
             float vIn = -s.Velocity.y;
             float vOut = surface.restitution * vIn;
+            float check = BackspinCheck(s);
 
             // 접점의 미끄럼 속도 = 수평 속도 + ω × (0, -r, 0)
             Vector3 slip = new Vector3(s.Velocity.x + RealRadius * s.Spin.z, 0f, s.Velocity.z - RealRadius * s.Spin.x);
@@ -148,9 +153,23 @@ namespace FirstPersonTennis
 
             // 무른 바닥(클레이)은 마찰과 별개로 수평 속도를 더 빼앗는다. 0은 값이 비어 있는 것으로 보고 그대로 둔다.
             float keep = surface.speedRetention > 0f ? surface.speedRetention : 1f;
+            keep *= Mathf.Lerp(1f, CheckedSpeed, check);
             s.Velocity.x *= keep;
             s.Velocity.z *= keep;
-            s.Velocity.y = vOut;
+            s.Velocity.y = vOut * Mathf.Lerp(1f, CheckedBounce, check);
+        }
+
+        // 드롭샷처럼 느리고 백스핀이 많이 걸린 공은 바운드에서 죽는다 (0 = 그대로, 1 = 완전히 죽음).
+        // 백스핀 비율 = 회전 때문에 접점이 진행 방향으로 더 미끄러지는 속도 ÷ 수평 속도.
+        // 빠른 슬라이스는 약 0.25라 그대로이고, 짧은 슬라이스부터 조금씩, 드롭샷은 거의 다 죽는다
+        static float BackspinCheck(in BallState s)
+        {
+            var horizontal = new Vector3(s.Velocity.x, 0f, s.Velocity.z);
+            float speed = horizontal.magnitude;
+            if (speed < 0.5f) return 0f;
+            var spinSlip = new Vector3(RealRadius * s.Spin.z, 0f, -RealRadius * s.Spin.x);
+            float backspin = Vector3.Dot(spinSlip, horizontal) / (speed * speed);
+            return Mathf.Clamp01((backspin - CheckStart) / (CheckFull - CheckStart));
         }
     }
 

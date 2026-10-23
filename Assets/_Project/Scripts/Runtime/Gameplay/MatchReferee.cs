@@ -11,6 +11,7 @@ namespace FirstPersonTennis
     // 경기 진행과 판정: 서브(폴트·렛·더블 폴트), 랠리(아웃·네트·투바운드), 점수, 서버 교대.
     // 연습 모드는 1단계처럼 AI가 공을 주고 랠리만 한다. 관전 모드는 가까운 쪽도 AI가 맡아 AI끼리 경기한다.
     // 튜토리얼은 자리 잡기와 공 주기만 하고 판정은 TutorialDirector가 과제별로 한다 (AI는 받아치지 않음).
+    // 복식(경기·관전): 팀마다 두 명, 복식 코트. 서브·리시브 순서(DoublesOrder)와 포인트 시작 위치를 정하고, 리시버만 서브를 받는다.
     public class MatchReferee : MonoBehaviour
     {
         [SerializeField] TennisConfig config;
@@ -24,6 +25,12 @@ namespace FirstPersonTennis
         [Tooltip("관전 모드에서 플레이어 대신 가까운 쪽을 맡는 AI (평소에는 꺼 둔다)")]
         [SerializeField] AiOpponent nearAi;
         [SerializeField] AutoSwing nearAiSwing;
+        [Tooltip("복식에서 가까운 쪽 팀원 AI (단식에서는 꺼 둔다)")]
+        [SerializeField] AiOpponent partner;
+        [SerializeField] AutoSwing partnerSwing;
+        [Tooltip("복식에서 먼 쪽 두 번째 AI (단식에서는 꺼 둔다)")]
+        [SerializeField] AiOpponent ai2;
+        [SerializeField] AutoSwing ai2Swing;
         [Tooltip("켜면 시작 메뉴부터, 끄면 기본 설정으로 바로 경기를 시작한다")]
         [SerializeField] bool startInMenu = true;
 
@@ -36,7 +43,11 @@ namespace FirstPersonTennis
         public PlayerMovement Player => player;
         public PlayerServe PlayerServe => playerServe;
         public AiOpponent NearAi => nearAi;
+        public AiOpponent Partner => partner;
+        public AiOpponent Ai2 => ai2;
         public bool Watching => Mode == GameMode.Watch;
+        public bool Doubles { get; private set; }
+        public string ServerName { get; private set; } = ""; // 지금 서브하는 선수 (복식 HUD)
         public GameMode Mode { get; private set; }
         public MatchPhase Phase { get; private set; } = MatchPhase.Menu;
         public TennisScore Score { get; private set; }
@@ -61,6 +72,7 @@ namespace FirstPersonTennis
         public event Action<int, PointReason> PointEnded; // 이긴 쪽, 이유
         public event Action<string> Called;               // 폴트, 렛 같은 심판 콜
         public event Action<string> ScoreCalled;          // 포인트 뒤 점수 콜
+        public event Action<PointOutcome> Scored;         // 점수가 오른 뒤 (게임·세트·매치를 땄는지). 연습 모드는 없음
         public event Action MatchFinished;
 
         readonly int[] pointsWon = new int[2];
@@ -74,28 +86,44 @@ namespace FirstPersonTennis
         public int PointsWon(int side) => pointsWon[I(side)];
         public int Aces(int side) => aces[I(side)];
         public int DoubleFaults(int side) => doubleFaults[I(side)];
-        public string NameOf(int side) => Watching ? (side == PlayerSide ? "AI 1" : "AI 2") : side == PlayerSide ? "나" : "상대";
 
-        // 프리셋 선수: 같은 선수를 양쪽이 동시에 골라도 된다
+        // 쪽(팀) 이름. 복식이면 팀 이름
+        public string NameOf(int side) => Doubles
+            ? (Watching ? (side == PlayerSide ? "AI 1팀" : "AI 2팀") : side == PlayerSide ? "우리 팀" : "상대 팀")
+            : (Watching ? (side == PlayerSide ? "AI 1" : "AI 2") : side == PlayerSide ? "나" : "상대");
+
+        // 복식 선수 이름: 팀(side)의 선수 0·1
+        public string AthleteName(int side, int index) => Watching
+            ? $"{NameOf(side)} {index + 1}"
+            : side == PlayerSide ? (index == 0 ? "나" : "파트너") : $"상대 {index + 1}";
+
+        // 프리셋 선수: 같은 선수를 여럿이 동시에 골라도 된다
         public CharacterPreset PlayerCharacter { get; private set; }
         public CharacterPreset AiCharacter => ai.Character;
         public CharacterPreset CharacterOf(int side) =>
             side != PlayerSide ? AiCharacter : Watching ? nearAi.Character : PlayerCharacter;
+        public CharacterPreset CharacterOf(int side, int index) =>
+            index == 0 ? CharacterOf(side) : side == PlayerSide ? partner.Character : ai2.Character;
 
-        // 관전 모드에서는 가까운 쪽 AI가 '내 선수'를 쓴다
-        public void SetCharacters(int playerIndex, int aiIndex)
+        // 관전 모드에서는 가까운 쪽 AI가 '내 선수'를 쓴다. partnerIndex·ai2Index는 복식 팀원과 두 번째 상대 (-1이면 그대로)
+        public void SetCharacters(int playerIndex, int aiIndex, int partnerIndex = -1, int ai2Index = -1)
         {
             playerCharacterIndex = playerIndex;
             aiCharacterIndex = aiIndex;
+            if (partnerIndex >= 0) partnerCharacterIndex = partnerIndex;
+            if (ai2Index >= 0) ai2CharacterIndex = ai2Index;
             PlayerCharacter = config.Character(playerIndex);
             PlayerStats stats = config.StatsOf(PlayerCharacter);
             playerSwing.Stats = stats;
             player.Stats = stats;
             ai.SetCharacter(config.Character(aiIndex));
             if (nearAi != null) nearAi.SetCharacter(PlayerCharacter);
+            if (partner != null) partner.SetCharacter(config.Character(partnerCharacterIndex));
+            if (ai2 != null) ai2.SetCharacter(config.Character(ai2CharacterIndex));
         }
 
-        int playerCharacterIndex, aiCharacterIndex;
+        int playerCharacterIndex, aiCharacterIndex, partnerCharacterIndex, ai2CharacterIndex;
+        readonly DoublesOrder doublesOrder = new DoublesOrder();
 
         void OnEnable()
         {
@@ -174,11 +202,17 @@ namespace FirstPersonTennis
             StopAllCoroutines();
             ResetPlayers();
             ai.SetDifficulty(difficulty);
-            SetMode(mode);
+            SetMode(mode, rules.doubles);
             if (Watching) nearAi.SetDifficulty(difficulty);
-            SetCharacters(playerCharacterIndex, aiCharacterIndex); // 켜진 관전 AI에도 다시 적용
+            if (Doubles)
+            {
+                partner.SetDifficulty(difficulty);
+                ai2.SetDifficulty(difficulty);
+            }
+            SetCharacters(playerCharacterIndex, aiCharacterIndex); // 막 켠 관전·복식 AI에도 다시 적용
             if (firstServer == 0) firstServer = rng.NextDouble() < 0.5 ? PlayerSide : AiSide;
             Score = new TennisScore(rules, firstServer);
+            doublesOrder.Reset();
             ServeNumber = 1;
             Array.Clear(pointsWon, 0, 2);
             Array.Clear(aces, 0, 2);
@@ -186,7 +220,7 @@ namespace FirstPersonTennis
             SetPaused(false);
             Phase = MatchPhase.PointOver;
             UpdateInput();
-            Called?.Invoke(Watching ? $"{NameOf(firstServer)} 서브로 시작" :
+            Called?.Invoke(Watching || Doubles ? $"{NameOf(firstServer)} 서브로 시작" :
                 firstServer == PlayerSide ? "내 서브로 시작" : "상대 서브로 시작");
             StartCoroutine(Serve(0.8f));
         }
@@ -221,13 +255,45 @@ namespace FirstPersonTennis
             UpdateInput();
         }
 
-        // 모드에 맞춰 관전 AI, 튜토리얼 AI(공만 주는 상대), 자동 기본 스트로크를 켜고 끈다. 난이도는 먼저 정해 둔다
-        void SetMode(GameMode mode)
+        // 모드에 맞춰 관전 AI, 복식 선수, 튜토리얼 AI(공만 주는 상대), 자동 기본 스트로크를 켜고 끈다. 난이도는 먼저 정해 둔다
+        void SetMode(GameMode mode, bool doubles = false)
         {
             Mode = mode;
+            Doubles = doubles && partner != null && ai2 != null;
+            Court.SetDoubles(Doubles);
             SetWatching(mode == GameMode.Watch);
+            if (partner != null) partner.gameObject.SetActive(Doubles);
+            if (ai2 != null) ai2.gameObject.SetActive(Doubles);
+            SetupTeams();
             ai.FeedOnly = mode == GameMode.Tutorial;
             playerSwing.AutoStroke = EasyPlay;
+        }
+
+        // 누가 누구와 한 팀이고 누구를 상대하는지 (AI의 빈 곳 노리기, 복식 스윙 충돌)
+        void SetupTeams()
+        {
+            Transform near = Watching ? nearAi.transform : player.transform;
+            AutoSwing nearSwing = Watching ? nearAiSwing : playerSwing;
+            foreach (AutoSwing s in new[] { playerSwing, aiSwing, nearAiSwing, partnerSwing, ai2Swing })
+            {
+                if (s == null) continue;
+                s.Teammate = null;
+                s.MayReturnServe = true;
+            }
+            if (!Doubles)
+            {
+                ai.SetOpponent(near);
+                if (Watching) nearAi.SetOpponent(ai.transform);
+                return;
+            }
+            ai.SetTeam(ai2.transform, near, partner.transform);
+            ai2.SetTeam(ai.transform, near, partner.transform);
+            partner.SetTeam(near, ai.transform, ai2.transform);
+            if (Watching) nearAi.SetTeam(partner.transform, ai.transform, ai2.transform);
+            aiSwing.Teammate = ai2Swing;
+            ai2Swing.Teammate = aiSwing;
+            nearSwing.Teammate = partnerSwing;
+            partnerSwing.Teammate = nearSwing;
         }
 
         void UpdateInput()
@@ -263,8 +329,64 @@ namespace FirstPersonTennis
             ai.CancelServe();
             playerSwing.CancelSwing();
             aiSwing.CancelSwing();
-            if (nearAi != null && nearAi.isActiveAndEnabled) nearAi.CancelServe();
-            if (nearAiSwing != null) nearAiSwing.CancelSwing();
+            foreach (AiOpponent other in new[] { nearAi, partner, ai2 })
+                if (other != null && other.isActiveAndEnabled) other.CancelServe();
+            foreach (AutoSwing other in new[] { nearAiSwing, partnerSwing, ai2Swing })
+                if (other != null) other.CancelSwing();
+        }
+
+        // ── 복식 선수 ─────────────────────────────────────────
+        // 팀(side)의 선수 0·1. 가까운 쪽 0은 플레이어(관전이면 관전용 AI), 1은 파트너. 먼 쪽 0은 상대 AI, 1은 두 번째 AI
+
+        AiOpponent AiOf(int side, int index) =>
+            side == PlayerSide ? (index == 0 ? (Watching ? nearAi : null) : partner) : (index == 0 ? ai : ai2);
+
+        AutoSwing SwingOf(int side, int index) =>
+            side == PlayerSide ? (index == 0 ? (Watching ? nearAiSwing : playerSwing) : partnerSwing) : (index == 0 ? aiSwing : ai2Swing);
+
+        void Place(int side, int index, Vector3 position)
+        {
+            AiOpponent athlete = AiOf(side, index);
+            if (athlete != null) athlete.ResetTo(position);
+            else player.ResetTo(position);
+        }
+
+        void BeginServeFor(int side, int index, bool deuce)
+        {
+            AiOpponent athlete = AiOf(side, index);
+            if (athlete != null) athlete.BeginServe(deuce, ServeNumber == 2);
+            else playerServe.BeginTurn(deuce, ServeNumber == 2);
+        }
+
+        // 내가 서브하지 않을 때의 서브 안내 (HUD)
+        public string ServeStatus => Score == null ? "" :
+            Score.Server == PlayerSide ? $"{ServerName} 서브" :
+            playerSwing.MayReturnServe ? "상대 서브 — 바운드 뒤에 받기" : "상대 서브 — 파트너가 받음";
+
+        // 복식 포인트 시작: 서버는 베이스라인 뒤(단식보다 바깥), 서버의 파트너는 반대쪽 네트 앞,
+        // 리시버는 대각선, 리시버의 파트너는 반대쪽 서비스라인 근처. 리시버의 파트너는 서브를 받지 않는다
+        void SetupDoublesServe(int server, bool deuce)
+        {
+            int receiver = -server;
+            int serverIndex = doublesOrder.ServerFor(server);
+            int receiverIndex = DoublesOrder.ReceiverFor(deuce);
+            float half = Court.SinglesHalfWidth;
+            Vector3 serverSpot = Court.ServePosition(server, deuce, half * 0.45f);
+            Vector3 receiverSpot = Court.ReceivePosition(receiver, deuce);
+            Place(server, serverIndex, serverSpot);
+            Place(server, 1 - serverIndex, new Vector3(-Mathf.Sign(serverSpot.x) * half * 0.5f, 0f, Court.ServiceLine * 0.45f * server));
+            Place(receiver, receiverIndex, receiverSpot);
+            Place(receiver, 1 - receiverIndex, new Vector3(-Mathf.Sign(receiverSpot.x) * half * 0.5f, 0f, (Court.ServiceLine + 0.5f) * receiver));
+
+            for (int i = 0; i < 2; i++)
+            {
+                AiOf(server, i)?.SetDoublesRole(i != serverIndex); // 서버의 파트너는 네트 앞 담당
+                AiOf(receiver, i)?.SetDoublesRole(false);
+                SwingOf(receiver, i).MayReturnServe = i == receiverIndex;
+                SwingOf(server, i).MayReturnServe = true;
+            }
+            ServerName = AthleteName(server, serverIndex);
+            BeginServeFor(server, serverIndex, deuce);
         }
 
         IEnumerator Serve(float delay)
@@ -281,6 +403,11 @@ namespace FirstPersonTennis
             bool deuce = Score.ServeFromDeuce;
             crossedNet = false;
             Phase = MatchPhase.Serve;
+            if (Doubles)
+            {
+                SetupDoublesServe(server, deuce);
+                return;
+            }
 
             if (server == PlayerSide)
             {
@@ -408,7 +535,7 @@ namespace FirstPersonTennis
             if (bounce == 1)
             {
                 if (!crossedNet || Court.SideOf(point.z) == hitter) EndPoint(receiver, PointReason.Net);
-                else if (!Court.IsInSingles(point, receiver)) EndPoint(receiver, PointReason.Out);
+                else if (!Court.IsInPlay(point, receiver)) EndPoint(receiver, PointReason.Out);
             }
             else if (bounce == 2)
             {
@@ -464,6 +591,7 @@ namespace FirstPersonTennis
             pointsWon[I(winner)]++;
             if (reason == PointReason.Ace) aces[I(winner)]++;
             PointOutcome outcome = Score.AddPoint(winner);
+            Scored?.Invoke(outcome);
             ServeNumber = 1;
             ScoreCalled?.Invoke(DescribeScore(outcome));
 

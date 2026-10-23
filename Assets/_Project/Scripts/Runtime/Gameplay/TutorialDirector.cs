@@ -282,7 +282,7 @@ namespace FirstPersonTennis
             if (hitter == player.Side && ball.BouncesSinceHit == 1)
             {
                 int receiver = -hitter;
-                bool inside = ball.IsServe ? Court.IsInServiceBox(point, receiver, ball.ServeToDeuce) : Court.IsInSingles(point, receiver);
+                bool inside = ball.IsServe ? Court.IsInServiceBox(point, receiver, ball.ServeToDeuce) : Court.IsInPlay(point, receiver);
                 if (!crossedNet || Court.SideOf(point.z) == hitter) outcome = Outcome.Net;
                 else if (!inside) outcome = Outcome.Out;
                 else if (ball.IsServe && ball.TouchedNet) outcome = Outcome.Let;

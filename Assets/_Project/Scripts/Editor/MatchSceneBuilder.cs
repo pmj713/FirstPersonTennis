@@ -11,16 +11,27 @@ using Object = UnityEngine.Object;
 
 namespace FirstPersonTennis.EditorTools
 {
-    // 경기 씬(하드코트, 플레이어, AI 상대, 공, 심판, 튜토리얼, 보조 표시, HUD)을 만들고 컴포넌트를 연결한다.
-    // 메뉴: FirstPersonTennis > Build Match Scene. 다시 실행하면 씬을 새로 만든다 (설정 에셋은 유지).
+    // 경기 씬(하드코트, 플레이어, AI 상대, 관전·복식용 AI, 공, 심판, 튜토리얼, 보조 표시, HUD)과
+    // 메인 화면 씬(코트를 도는 카메라, 메뉴)을 만들고 컴포넌트를 연결한다.
+    // 메뉴: FirstPersonTennis > Build Match Scene / Build Title Scene. 다시 실행하면 씬을 새로 만든다 (설정 에셋은 유지).
     public static class MatchSceneBuilder
     {
         const string Root = "Assets/_Project";
         public const string ScenePath = Root + "/Scenes/Match.unity";
+        public const string TitleScenePath = Root + "/Scenes/Title.unity"; // 메인 화면 (빌드 첫 씬)
         const string ConfigPath = Root + "/Settings/TennisConfig.asset";
         const string MaterialDir = Root + "/Materials";
         const string BallModelPath = Root + "/Art/Props/TennisBall/TennisBall.fbx";
         const string RacketModelPath = Root + "/Art/Props/TennisRacket/TennisRacket.fbx";
+        const string PrefabDir = Root + "/Prefabs";
+        const string HitAudioDir = Root + "/Audio/Hits"; // 라켓 타구음 녹음 (구질별 하위 폴더)
+        const string BounceAudioDir = Root + "/Audio/Bounces"; // 공이 바닥에 튀는 소리 녹음
+        const string CrowdAudioDir = Root + "/Audio/Crowd"; // 관중 녹음 (종류별 하위 폴더)
+        const string UmpireAudioDir = Root + "/Audio/Umpire"; // 심판 콜 (파일 이름 = 콜 이름)
+        const string GruntAudioDir = Root + "/Audio/Grunts"; // 선수 기합 녹음
+        public const string TitleMusicPath = Root + "/Audio/Music/TitleTheme.wav"; // 메인 화면 배경음악 (ArtSource/Music/TitleTheme.cs로 만든다)
+        public const string AthletePrefabPath = PrefabDir + "/TennisPlayer.prefab"; // 캐릭터 모델 + 오른손 라켓 + 애니메이션
+        public const string BallPrefabPath = PrefabDir + "/TennisBall.prefab";      // 공 모델 + 범위 알림 테두리 + 공 물리
 
         [MenuItem("FirstPersonTennis/Build Match Scene")]
         public static void BuildFromMenu()
@@ -33,7 +44,7 @@ namespace FirstPersonTennis.EditorTools
         // unity run <project> -- -executeMethod FirstPersonTennis.EditorTools.MatchSceneBuilder.Build
         public static void Build()
         {
-            foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir })
+            foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir, PrefabDir })
                 EnsureFolder(folder);
 
             // 새 씬을 만들면 쓰이지 않는 에셋이 메모리에서 내려가므로, 에셋은 씬을 만든 뒤에 불러온다.
@@ -44,21 +55,15 @@ namespace FirstPersonTennis.EditorTools
             AnimatorController athleteController = AthleteModel.MatchController();
             SetupLighting();
 
-            // 코트는 Play를 누를 때 설정 크기로 다시 만들어진다. 여기서는 에디터에서 보이도록 한 번 만들어 둔다.
-            var court = new GameObject("Court").AddComponent<CourtView>();
-            Set(court, "config", config);
-            Set(court, "surround", m.Surround);
-            Set(court, "courtSurface", m.CourtSurface);
-            Set(court, "line", m.Line);
-            Set(court, "net", m.Net);
-            Set(court, "post", m.Post);
-            court.Rebuild();
+            CreateCourt(config, m);
+            CreateStadium(config, m);
 
             TennisBall ball = CreateBall(m, config, out GameObject halo);
+            GameObject athletePrefab = CreateAthletePrefab(athleteController); // 선수 다섯 명이 모두 이 프리팹을 쓴다
 
             // 플레이어 (근거리, side -1)
             Transform playerRoot = CreateAthlete("Player", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f, m.Player,
-                athleteController, out Renderer[] playerBody, out AthleteAnimator playerRacket);
+                athletePrefab, out Renderer[] playerBody, out AthleteAnimator playerRacket);
             var movement = playerRoot.gameObject.AddComponent<PlayerMovement>();
             var gesture = playerRoot.gameObject.AddComponent<ShotGestureInput>();
             var playerSwing = playerRoot.gameObject.AddComponent<AutoSwing>();
@@ -75,7 +80,7 @@ namespace FirstPersonTennis.EditorTools
 
             // AI 상대 (원거리, side +1). 오차 배율은 경기 시작 때 난이도로 다시 정한다.
             Transform aiRoot = CreateAthlete("Opponent", new Vector3(0f, 0f, Court.HalfLength + 0.8f), 180f, m.Opponent,
-                athleteController, out _, out AthleteAnimator aiRacket);
+                athletePrefab, out _, out AthleteAnimator aiRacket);
             var ai = aiRoot.gameObject.AddComponent<AiOpponent>();
             var aiSwing = aiRoot.gameObject.AddComponent<AutoSwing>();
             Set(ai, "config", config);
@@ -86,7 +91,7 @@ namespace FirstPersonTennis.EditorTools
 
             // 관전용 AI (가까운 쪽, side -1). AI 대결 관전과 선수 밸런스 측정 때만 켠다.
             Transform nearRoot = CreateAthlete("NearOpponent", new Vector3(0f, 0f, -(Court.HalfLength + 0.8f)), 0f,
-                m.NearOpponent, athleteController, out _, out AthleteAnimator nearRacket);
+                m.NearOpponent, athletePrefab, out _, out AthleteAnimator nearRacket);
             var nearAi = nearRoot.gameObject.AddComponent<AiOpponent>();
             var nearSwing = nearRoot.gameObject.AddComponent<AutoSwing>();
             Set(nearAi, "config", config);
@@ -96,6 +101,12 @@ namespace FirstPersonTennis.EditorTools
             SetInt(nearAi, "randomSeed", 13);
             WireSwing(nearSwing, config, ball, -1, nearRacket, nearAi, config.AiProfileFor(config.defaultDifficulty).errorScale, 37);
             nearRoot.gameObject.SetActive(false);
+
+            // 복식: 가까운 쪽 팀원 AI와 먼 쪽 두 번째 AI. 팀·상대는 경기를 시작할 때 심판이 정한다
+            AiOpponent partner = CreateAiAthlete("Partner", -1, new Vector3(Court.SinglesHalfWidth * 0.5f, 0f, -Court.ServiceLine * 0.45f),
+                0f, m.Partner, athletePrefab, config, ball, aiRoot, 41, 43, out AutoSwing partnerSwing);
+            AiOpponent ai2 = CreateAiAthlete("Opponent2", 1, new Vector3(-Court.SinglesHalfWidth * 0.5f, 0f, Court.ServiceLine * 0.45f),
+                180f, m.Opponent2, athletePrefab, config, ball, playerRoot, 47, 53, out AutoSwing ai2Swing);
 
             // 진행
             var systems = new GameObject("Systems");
@@ -110,6 +121,10 @@ namespace FirstPersonTennis.EditorTools
             Set(referee, "aiSwing", aiSwing);
             Set(referee, "nearAi", nearAi);
             Set(referee, "nearAiSwing", nearSwing);
+            Set(referee, "partner", partner);
+            Set(referee, "partnerSwing", partnerSwing);
+            Set(referee, "ai2", ai2);
+            Set(referee, "ai2Swing", ai2Swing);
 
             var tutorial = systems.AddComponent<TutorialDirector>();
             Set(tutorial, "config", config);
@@ -119,6 +134,12 @@ namespace FirstPersonTennis.EditorTools
             Set(tutorial, "input", gesture);
             Set(tutorial, "swing", playerSwing);
             Set(tutorial, "serve", playerServe);
+
+            // 메인 화면에서 고른 것(튜토리얼·단계 도전·자유 경기) 시작과 돌아갈 곳
+            var flow = systems.AddComponent<GameFlow>();
+            Set(flow, "config", config);
+            Set(flow, "referee", referee);
+            Set(flow, "tutorial", tutorial);
 
             // 카메라 + 소리
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
@@ -138,6 +159,26 @@ namespace FirstPersonTennis.EditorTools
             var audio = camGo.AddComponent<AudioFeedback>();
             Set(audio, "ball", ball);
             Set(audio, "referee", referee);
+            // 라켓 타구음 녹음 (Audio/Hits/구질 폴더, SOURCES.md 참고). 폴더가 비면 합성음
+            SetArray(audio, "driveHits", LoadClips($"{HitAudioDir}/Drive"));
+            SetArray(audio, "sliceHits", LoadClips($"{HitAudioDir}/Slice"));
+            SetArray(audio, "serveHits", LoadClips($"{HitAudioDir}/Serve"));
+            SetArray(audio, "volleyHits", LoadClips($"{HitAudioDir}/Volley"));
+            SetArray(audio, "bounceClips", LoadClips(BounceAudioDir));
+            SetArray(audio, "grunts", LoadClips(GruntAudioDir));
+
+            // 관중 소리 (Audio/Crowd/종류 폴더, SOURCES.md 참고)
+            var umpireSource = new GameObject("Umpire").AddComponent<AudioSource>();
+            umpireSource.playOnAwake = false;
+            var umpire = umpireSource.gameObject.AddComponent<UmpireVoice>();
+            Set(umpire, "referee", referee);
+            SetArray(umpire, "calls", LoadClips(UmpireAudioDir)); // 심판 콜 (ArtSource/Audio/Umpire로 만든다)
+            var crowd = new GameObject("Crowd").AddComponent<CrowdAudio>();
+            Set(crowd, "referee", referee);
+            Set(crowd, "umpire", umpire);
+            foreach (var (field, folder) in new[] { ("ambience", "Ambience"), ("chatter", "Chatter"), ("applauseSmall", "ApplauseSmall"),
+                ("applauseMedium", "ApplauseMedium"), ("applauseBig", "ApplauseBig"), ("cheers", "Cheer") })
+                SetArray(crowd, field, LoadClips($"{CrowdAudioDir}/{folder}", compressed: true));
 
             // 거리감 보조
             Transform shadow = CreateRing("BallShadow", 0f, 0.5f, m.Shadow);
@@ -169,12 +210,119 @@ namespace FirstPersonTennis.EditorTools
             Set(hud, "playerServe", playerServe);
             Set(hud, "cameraRig", cameraRig);
             Set(hud, "tutorial", tutorial);
+            Set(hud, "flow", flow);
 
             ValidateReferences(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
-            AddToBuildSettings(ScenePath);
+            SetBuildScenes();
             AssetDatabase.SaveAssets();
             Debug.Log($"[FirstPersonTennis] 경기 씬 생성 완료: {ScenePath}");
+        }
+
+        [MenuItem("FirstPersonTennis/Build Title Scene")]
+        public static void BuildTitleFromMenu()
+        {
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            BuildTitle();
+            EditorSceneManager.OpenScene(TitleScenePath);
+        }
+
+        // 경기 씬과 메인 화면을 모두 다시 만든다 (선수 프리팹은 경기 씬이 만든다)
+        // unity run <project> -- -executeMethod FirstPersonTennis.EditorTools.MatchSceneBuilder.BuildAll
+        public static void BuildAll()
+        {
+            Build();
+            BuildTitle();
+        }
+
+        // 메인 화면: 빈 코트 + 코트 밖을 도는 카메라 + 10초마다 바뀌는 코트 + 메뉴
+        public static void BuildTitle()
+        {
+            foreach (string folder in new[] { Root, Root + "/Scenes", Root + "/Settings", MaterialDir, PrefabDir })
+                EnsureFolder(folder);
+
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            TennisConfig config = LoadOrCreateConfig();
+            var m = new Materials();
+            SetupLighting();
+            CreateCourt(config, m);
+            CreateStadium(config, m);
+
+            var camGo = new GameObject("Main Camera") { tag = "MainCamera" };
+            var cam = camGo.AddComponent<Camera>();
+            cam.nearClipPlane = 0.1f;
+            cam.farClipPlane = 300f;
+            camGo.AddComponent<AudioListener>();
+            camGo.AddComponent<TitleCamera>();
+
+            var systems = new GameObject("Systems");
+            var cycle = systems.AddComponent<TitleCourtCycle>();
+            Set(cycle, "config", config);
+            Set(cycle, "cam", cam);
+            var menu = systems.AddComponent<TitleMenu>();
+            Set(menu, "config", config);
+
+            var music = new GameObject("Music").AddComponent<AudioSource>();
+            music.clip = LoadTitleMusic();
+            music.playOnAwake = false; // TitleMusic이 서서히 키우며 튼다
+            music.loop = true;
+            music.spatialBlend = 0f;
+            music.gameObject.AddComponent<TitleMusic>();
+
+            ValidateReferences(scene);
+            EditorSceneManager.SaveScene(scene, TitleScenePath);
+            SetBuildScenes();
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[FirstPersonTennis] 메인 화면 씬 생성 완료: {TitleScenePath}");
+        }
+
+        // 코트 주위 경기장 (펜스·관중석·조명탑·전광판·심판 의자·벤치). 코트처럼 Play 때 코트 크기에 맞춰 다시 만들어진다
+        static StadiumView CreateStadium(TennisConfig config, Materials m)
+        {
+            var stadium = new GameObject("Stadium").AddComponent<StadiumView>();
+            Set(stadium, "config", config);
+            Set(stadium, "concrete", m.StandConcrete);
+            Set(stadium, "seat", m.StandSeat);
+            Set(stadium, "seatAccent", m.StandSeatAccent);
+            Set(stadium, "barrier", m.Barrier);
+            Set(stadium, "barrierAlt", m.BarrierAlt);
+            Set(stadium, "trim", m.Line);
+            Set(stadium, "metal", m.StadiumMetal);
+            Set(stadium, "screen", m.Screen);
+            stadium.Rebuild();
+            return stadium;
+        }
+
+        // 코트는 Play를 누를 때 설정 크기로 다시 만들어진다. 여기서는 에디터에서 보이도록 한 번 만들어 둔다.
+        static CourtView CreateCourt(TennisConfig config, Materials m)
+        {
+            var court = new GameObject("Court").AddComponent<CourtView>();
+            Set(court, "config", config);
+            Set(court, "surround", m.Surround);
+            Set(court, "courtSurface", m.CourtSurface);
+            Set(court, "line", m.Line);
+            Set(court, "net", m.Net);
+            Set(court, "post", m.Post);
+            court.Rebuild();
+            return court;
+        }
+
+        // 복식용 AI 선수 하나 (꺼 둔 채로 만든다)
+        static AiOpponent CreateAiAthlete(string name, int side, Vector3 position, float yaw, Material shirt,
+            GameObject prefab, TennisConfig config, TennisBall ball, Transform opponent,
+            int aiSeed, int swingSeed, out AutoSwing swing)
+        {
+            Transform root = CreateAthlete(name, position, yaw, shirt, prefab, out _, out AthleteAnimator racket);
+            var ai = root.gameObject.AddComponent<AiOpponent>();
+            swing = root.gameObject.AddComponent<AutoSwing>();
+            Set(ai, "config", config);
+            Set(ai, "ball", ball);
+            Set(ai, "swing", swing);
+            Set(ai, "opponent", opponent);
+            SetInt(ai, "randomSeed", aiSeed);
+            WireSwing(swing, config, ball, side, racket, ai, config.AiProfileFor(config.defaultDifficulty).errorScale, swingSeed);
+            root.gameObject.SetActive(false);
+            return ai;
         }
 
         static void WireSwing(AutoSwing swing, TennisConfig config, TennisBall ball, int side,
@@ -230,6 +378,8 @@ namespace FirstPersonTennis.EditorTools
             var component = ball.gameObject.AddComponent<TennisBall>();
             Set(component, "config", config);
             Set(visual.AddComponent<BallSpinVisual>(), "ball", component);
+            // 프리팹으로 저장하고 씬의 공은 그 프리팹 인스턴스가 된다
+            PrefabUtility.SaveAsPrefabAssetAndConnect(ball.gameObject, BallPrefabPath, InteractionMode.AutomatedAction);
             return component;
         }
 
@@ -252,18 +402,13 @@ namespace FirstPersonTennis.EditorTools
             return go;
         }
 
-        // 선수: 루트(네트를 봄, 이동·타격 컴포넌트) 아래 캐릭터 모델. 상의 색으로 선수를 구분한다.
-        // body: 1인칭에서 숨길 몸 메시 (라켓은 1인칭에서도 보인다)
-        static Transform CreateAthlete(string name, Vector3 position, float yaw, Material shirt,
-            RuntimeAnimatorController controller, out Renderer[] body, out AthleteAnimator animation)
+        // 선수 프리팹: 루트 아래 캐릭터 모델(Model) + 오른손 라켓 + 애니메이션 연결. 이동·타격·AI 컴포넌트는 씬에서 역할별로 붙인다.
+        static GameObject CreateAthletePrefab(RuntimeAnimatorController controller)
         {
-            var root = new GameObject(name).transform;
-            root.position = position;
-            root.rotation = Quaternion.Euler(0f, yaw, 0f);
-
+            var root = new GameObject("TennisPlayer");
             var model = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(AthleteModel.FbxPath));
             model.name = "Model";
-            model.transform.SetParent(root, false);
+            model.transform.SetParent(root.transform, false);
             model.transform.localRotation = Quaternion.Euler(0f, 180f, 0f); // FBX 축 변환 뒤 모델은 -Z를 본다 → 루트 앞(+Z)으로
             Animator animator = model.GetComponent<Animator>();
             if (animator == null) animator = model.AddComponent<Animator>();
@@ -271,17 +416,34 @@ namespace FirstPersonTennis.EditorTools
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
-            body = model.GetComponentsInChildren<SkinnedMeshRenderer>().Cast<Renderer>().ToArray();
+            Transform racket = AttachRacket(model.transform);
+
+            var animation = root.AddComponent<AthleteAnimator>();
+            Set(animation, "animator", animator);
+            Set(animation, "model", model.transform);
+            Set(animation, "hands", model.GetComponentsInChildren<SkinnedMeshRenderer>().First(r => r.name.EndsWith("_Body")));
+            Set(animation, "racket", racket);
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, AthletePrefabPath);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        // 선수: 프리팹 인스턴스(네트를 봄)에 상의 색을 입혀 선수를 구분한다.
+        // body: 1인칭에서 숨길 몸 메시 (라켓은 1인칭에서도 보인다)
+        static Transform CreateAthlete(string name, Vector3 position, float yaw, Material shirt,
+            GameObject prefab, out Renderer[] body, out AthleteAnimator animation)
+        {
+            var root = ((GameObject)PrefabUtility.InstantiatePrefab(prefab)).transform;
+            root.name = name;
+            root.position = position;
+            root.rotation = Quaternion.Euler(0f, yaw, 0f);
+
+            body = root.GetComponentsInChildren<SkinnedMeshRenderer>().Cast<Renderer>().ToArray();
             foreach (Renderer r in body)
                 if (r.name.EndsWith("_Top")) r.sharedMaterials = Enumerable.Repeat(shirt, r.sharedMaterials.Length).ToArray();
 
-            Transform racket = AttachRacket(model.transform);
-
-            animation = root.gameObject.AddComponent<AthleteAnimator>();
-            Set(animation, "animator", animator);
-            Set(animation, "model", model.transform);
-            Set(animation, "hands", body.First(r => r.name.EndsWith("_Body")));
-            Set(animation, "racket", racket);
+            animation = root.GetComponent<AthleteAnimator>();
             return root;
         }
 
@@ -337,12 +499,22 @@ namespace FirstPersonTennis.EditorTools
             public readonly Material Player = Lit("Player", new Color(0.2f, 0.45f, 0.9f));
             public readonly Material Opponent = Lit("Opponent", new Color(0.85f, 0.25f, 0.2f));
             public readonly Material NearOpponent = Lit("NearOpponent", new Color(0.95f, 0.75f, 0.2f));
+            public readonly Material Partner = Lit("Partner", new Color(0.35f, 0.75f, 0.95f));
+            public readonly Material Opponent2 = Lit("Opponent2", new Color(0.95f, 0.5f, 0.2f));
             public readonly Material Net = Transparent("Net", new Color(0.05f, 0.05f, 0.05f, 0.55f), true);
             public readonly Material Shadow = Transparent("BallShadow", new Color(0f, 0f, 0f, 0.55f));
             public readonly Material Marker = Transparent("LandingMarker", new Color(1f, 0.85f, 0.1f, 0.85f));
             public readonly Material Halo = Transparent("BallHalo", new Color(0.3f, 0.9f, 1f, 0.35f));
             public readonly Material TutorialTarget = Transparent("TutorialTarget", new Color(0.3f, 0.95f, 0.4f, 0.85f));
             public readonly Material BallMark = Transparent("BallMark", new Color(0.38f, 0.16f, 0.08f, 0.6f));
+            // 경기장 (StadiumView)
+            public readonly Material StandConcrete = Lit("StandConcrete", new Color(0.42f, 0.43f, 0.45f));
+            public readonly Material StandSeat = Lit("StandSeat", new Color(0.1f, 0.3f, 0.62f), 0.35f);
+            public readonly Material StandSeatAccent = Lit("StandSeatAccent", new Color(0.12f, 0.55f, 0.7f), 0.35f);
+            public readonly Material Barrier = Lit("Barrier", new Color(0.05f, 0.14f, 0.28f), 0.3f);
+            public readonly Material BarrierAlt = Lit("BarrierAlt", new Color(0.08f, 0.22f, 0.4f), 0.3f);
+            public readonly Material StadiumMetal = Lit("StadiumMetal", new Color(0.3f, 0.32f, 0.35f), 0.5f);
+            public readonly Material Screen = Lit("Screen", new Color(0.03f, 0.04f, 0.07f), 0.8f);
         }
 
         static Material Lit(string name, Color color, float smoothness = 0.1f)
@@ -401,13 +573,13 @@ namespace FirstPersonTennis.EditorTools
             AssetDatabase.CreateFolder(path.Substring(0, slash), path.Substring(slash + 1));
         }
 
-        static void AddToBuildSettings(string path)
+        // 빌드 씬 목록: 메인 화면이 첫 씬, 그다음 경기 씬. 아직 만들지 않은 씬은 뺀다 (템플릿 SampleScene 등은 넣지 않는다)
+        static void SetBuildScenes()
         {
-            // 지워진 씬(1단계 Phase1Court 등)은 목록에서 뺀다
-            var scenes = EditorBuildSettings.scenes
-                .Where(s => s.path != path && AssetDatabase.LoadAssetAtPath<SceneAsset>(s.path) != null).ToList();
-            scenes.Insert(0, new EditorBuildSettingsScene(path, true));
-            EditorBuildSettings.scenes = scenes.ToArray();
+            EditorBuildSettings.scenes = new[] { TitleScenePath, ScenePath }
+                .Where(path => AssetDatabase.LoadAssetAtPath<SceneAsset>(path) != null)
+                .Select(path => new EditorBuildSettingsScene(path, true))
+                .ToArray();
         }
 
         // ── 직렬화 필드 연결 ──────────────────────────────────────
@@ -459,6 +631,35 @@ namespace FirstPersonTennis.EditorTools
             var so = new SerializedObject(target);
             Find(so, field).floatValue = value;
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static AudioClip LoadTitleMusic()
+        {
+            KeepCompressed(TitleMusicPath);
+            return AssetDatabase.LoadAssetAtPath<AudioClip>(TitleMusicPath);
+        }
+
+        // 긴 스테레오 녹음은 메모리에 압축된 채로 두고 재생하며 푼다 (풀어 두면 1분에 약 10MB)
+        static void KeepCompressed(string path)
+        {
+            if (!(AssetImporter.GetAtPath(path) is AudioImporter importer)) return;
+            AudioImporterSampleSettings s = importer.defaultSampleSettings;
+            if (s.loadType == AudioClipLoadType.CompressedInMemory && s.compressionFormat == AudioCompressionFormat.Vorbis && s.quality == 0.7f) return;
+            s.loadType = AudioClipLoadType.CompressedInMemory;
+            s.compressionFormat = AudioCompressionFormat.Vorbis;
+            s.quality = 0.7f;
+            importer.defaultSampleSettings = s;
+            importer.SaveAndReimport();
+        }
+
+        // 폴더 안의 소리 (이름순). compressed면 메모리에 압축된 채로 두게 한다
+        static Object[] LoadClips(string folder, bool compressed = false)
+        {
+            if (!AssetDatabase.IsValidFolder(folder)) return new Object[0];
+            string[] paths = AssetDatabase.FindAssets("t:AudioClip", new[] { folder })
+                .Select(AssetDatabase.GUIDToAssetPath).OrderBy(p => p).ToArray();
+            if (compressed) foreach (string p in paths) KeepCompressed(p);
+            return paths.Select(p => (Object)AssetDatabase.LoadAssetAtPath<AudioClip>(p)).ToArray();
         }
 
         static void SetArray(Object target, string field, Object[] values)

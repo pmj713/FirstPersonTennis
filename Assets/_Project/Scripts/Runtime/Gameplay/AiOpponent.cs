@@ -3,9 +3,11 @@ using UnityEngine;
 
 namespace FirstPersonTennis
 {
-    // 단식 AI: 공을 읽고 타점으로 가서, 상대 위치를 보고 구질과 방향을 고른다. 서브도 넣는다.
+    // 테니스 AI: 공을 읽고 타점으로 가서, 상대 위치를 보고 구질과 방향을 고른다. 서브도 넣는다.
     // 실력 차이는 난이도 프로필(반응, 이동, 오차, 샷 선택, 위치 선정)로 만들고, 스테미너·타격 판정은 플레이어와 같은 규칙.
     // 가까운 쪽(side -1)에 두면 AI끼리 대결(관전, 밸런스 측정)도 한다.
+    // 복식: 공은 떨어질 자리에 더 가까운 팀원이 맡고, 맡지 않을 때는 내 쪽 절반(네트 앞 또는 베이스라인)을 지킨다.
+    // 상대 두 명 사이·바깥의 빈 곳을 노린다.
     public class AiOpponent : MonoBehaviour, IMover, IShotIntentSource
     {
         [SerializeField] TennisConfig config;
@@ -19,6 +21,10 @@ namespace FirstPersonTennis
         const float SmashApex = 3.2f;
         // 걸어서 가면 타점에 이만큼 늦어도 뛰지 않는다 (초)
         const float PaceMargin = 0.15f;
+        // 복식: 맡은 공은 팀원이 이만큼 더 가까워져야 넘긴다 (m)
+        const float HandOver = 1f;
+        // 복식: 팀원과 이보다 가까이 붙지 않는다 (m)
+        const float MinGap = 1f;
 
         public AiDifficulty Difficulty { get; private set; }
         public AiProfile Profile => profile;
@@ -34,6 +40,7 @@ namespace FirstPersonTennis
         public bool FeedOnly { get; set; }
         public Vector3 FeedContact => swing.FeedContact;
         public int Side => swing.Side;
+        public bool Doubles => teammate != null;
 
         enum ServeState { None, Waiting, Tossing }
 
@@ -53,13 +60,20 @@ namespace FirstPersonTennis
         bool atNet;              // 네트로 들어가 발리로 끝내려는 중
         Vector3 recoverSpot;
 
+        // 복식
+        Transform teammate;      // 같은 팀 선수 (단식이면 null)
+        AiOpponent mateAi;       // 팀원이 AI면 (플레이어면 null)
+        Transform opponent2;     // 두 번째 상대
+        float lane = 1f;         // 맡은 쪽 (월드 x 부호)
+        bool chasing;            // 이번 공을 내가 맡았는지
+
         ServeState serveState;
         float serveTimer;
         float releaseHeight;
         bool serveDeuce, serveSecond;
 
         float Facing => Court.Facing(Side);
-        float MaxAimX => Mathf.Max(0.5f, Court.SinglesHalfWidth - config.aimMargin);
+        float MaxAimX => Mathf.Max(0.5f, Court.PlayHalfWidth - config.aimMargin);
         float Baseline => (Court.HalfLength + 0.8f) * Side;
         float NetDepth => Court.ServiceLine * 0.5f * Side;
         float WalkSpeed => config.walkSpeed * stats.MoveScale;
@@ -74,8 +88,8 @@ namespace FirstPersonTennis
             recoverSpot = new Vector3(0f, 0f, Baseline);
         }
 
-        void OnEnable() => ball.Launched += OnBallLaunched;
-        void OnDisable() => ball.Launched -= OnBallLaunched;
+        void OnEnable() => swing.Hit += OnOwnShot;
+        void OnDisable() => swing.Hit -= OnOwnShot;
 
         void Start() => FaceNet();
 
@@ -94,7 +108,23 @@ namespace FirstPersonTennis
             swing.Stats = stats;
         }
 
-        public void SetOpponent(Transform target) => opponent = target;
+        public void SetOpponent(Transform target) => SetTeam(null, target, null);
+
+        // 복식: 팀원과 상대 두 명. 단식이면 teammate·opponentB = null
+        public void SetTeam(Transform teammateTransform, Transform opponentA, Transform opponentB)
+        {
+            teammate = teammateTransform;
+            mateAi = teammate != null ? teammate.GetComponent<AiOpponent>() : null;
+            opponent = opponentA;
+            opponent2 = opponentB;
+        }
+
+        // 복식 포인트 시작 때 (자리를 잡은 뒤): 지금 선 자리의 좌우를 맡고, 네트 앞 담당인지 정한다
+        public void SetDoublesRole(bool netPlayer)
+        {
+            atNet = netPlayer;
+            lane = transform.position.x >= 0f ? 1f : -1f;
+        }
 
         public void ResetTo(Vector3 position)
         {
@@ -140,11 +170,16 @@ namespace FirstPersonTennis
                 {
                     DecideSmash();
                     SkipRequested = readsOut && WillLandOut();
-                    if (!SkipRequested && TryGetSpot(out Vector3 spot, out float seconds))
+                    bool mateReceives = ball.IsServe && !swing.MayReturnServe; // 복식: 서브는 정해진 리시버만 받는다
+                    if (!SkipRequested && !mateReceives && TryGetSpot(out Vector3 spot, out float seconds) && ShouldChase(spot))
                     {
                         AdjustForSituation(spot, seconds);
                         target = spot + (reactionTimer < misjudgeUntil ? misjudgeOffset : Vector3.zero);
                         maxSpeed = PaceFor(target, seconds);
+                    }
+                    else if (Doubles && !mateReceives)
+                    {
+                        target = HomeSpot(); // 팀원이 맡은 공: 내 쪽을 지킨다
                     }
                 }
             }
@@ -153,8 +188,8 @@ namespace FirstPersonTennis
                 reactionTimer = 0f;
                 if (ball.IsLive && ball.LastHitterSide == Side)
                 {
-                    // 친 뒤: 네트로 들어가면 뛰고, 아니면 걸어서 돌아가 스테미너를 아낀다
-                    target = recoverSpot;
+                    // 친 뒤 (복식은 팀원이 쳐도): 네트로 들어가면 뛰고, 아니면 걸어서 돌아가 스테미너를 아낀다
+                    target = Doubles ? HomeSpot() : recoverSpot;
                     float recovery = profile.recoverySpeed > 0f ? profile.recoverySpeed : 1f;
                     maxSpeed = atNet ? RunSpeed : Mathf.Min(RunSpeed, WalkSpeed * recovery);
                 }
@@ -184,13 +219,76 @@ namespace FirstPersonTennis
             // 미끄러운 바닥에서는 멈추는 데 걸리는 거리만큼 일찍 속도를 줄인다
             float stopSpeed = Mathf.Sqrt(2f * Court.BrakeRate(profile.acceleration, stats.SlideScale) * distance);
             Vector3 desired = distance > 0.02f ? to / distance * Mathf.Min(maxSpeed, distance * 6f, stopSpeed) : Vector3.zero;
-            Velocity = Vector3.MoveTowards(Velocity, desired, Court.MoveRate(Velocity, desired, profile.acceleration, stats.SlideScale) * dt);
+            if (swing.IsSwinging && config.swingPlantDeceleration > 0f) // 플레이어와 같은 규칙: 스윙 중에는 발을 멈춘다
+                Velocity = Vector3.MoveTowards(Velocity, Vector3.zero, config.swingPlantDeceleration * dt);
+            else
+                Velocity = Vector3.MoveTowards(Velocity, desired, Court.MoveRate(Velocity, desired, profile.acceleration, stats.SlideScale) * dt);
 
             Vector3 p = transform.position + Velocity * dt;
+            if (Doubles)
+            {
+                // 팀원과 겹치지 않게 밀려난다 (넘어지거나 실점하지는 않는다)
+                Vector3 apart = p - teammate.position;
+                apart.y = 0f;
+                float gap = apart.magnitude;
+                if (gap < MinGap) p = teammate.position + (gap > 1e-3f ? apart / gap : new Vector3(lane, 0f, 0f)) * MinGap;
+            }
             p.x = Mathf.Clamp(p.x, -Court.PlayableHalfWidth, Court.PlayableHalfWidth);
             p.z = Mathf.Clamp(p.z * Side, 0.5f, Court.PlayableDepth) * Side;
             p.y = 0f;
             transform.position = p;
+        }
+
+        // ── 복식 ──────────────────────────────────────────────
+
+        // 공은 떨어질 자리(같은 궤적이라 팀원 AI도 같은 점을 본다)에 더 가까운 쪽이 맡는다. 맡은 공은 팀원이 HandOver만큼
+        // 더 가까워져야 넘기고, 팀원이 맡았으면 내가 그만큼 더 가까울 때만 가져온다. 거리가 같으면 왼쪽 선수(가운데 공을 포핸드로)
+        bool ShouldChase(Vector3 spot)
+        {
+            if (!Doubles) return true;
+            Vector3 reference = swing.HasLanding ? swing.LandingPoint : spot;
+            float mine = Flat(reference - transform.position), theirs = Flat(reference - teammate.position);
+            if (chasing) chasing = mine <= theirs + HandOver;
+            else if (mateAi != null && mateAi.chasing) chasing = mine < theirs - HandOver;
+            else chasing = mine < theirs || (Mathf.Approximately(mine, theirs) && transform.position.x * Facing < teammate.position.x * Facing);
+            return chasing;
+        }
+
+        // 공을 맡지 않을 때 설 자리: 내 쪽 절반의 가운데쯤, 네트 앞 담당이면 네트 앞. 공이 있는 쪽으로 조금 치우친다
+        Vector3 HomeSpot()
+        {
+            float half = Court.PlayHalfWidth;
+            float ballX = Mathf.Clamp(ball.State.Position.x, -half, half);
+            float x = lane * half * 0.45f + ballX * 0.25f * profile.anticipation;
+            return new Vector3(Mathf.Clamp(x, -half, half), 0f, atNet ? NetDepth : Baseline);
+        }
+
+        static float Flat(Vector3 v) => new Vector2(v.x, v.z).magnitude;
+
+        // 상대 중 네트에 가장 가까운 선수의 깊이 (단식이면 상대 한 명). 네트 앞이면 패싱·로브, 모두 뒤면 드롭샷을 고른다
+        float ClosestOpponentDepth()
+        {
+            float depth = opponent != null ? opponent.position.z * -Side : Court.HalfLength;
+            if (opponent2 != null) depth = Mathf.Min(depth, opponent2.position.z * -Side);
+            return depth;
+        }
+
+        // 복식에서 노릴 곳: 상대 두 명과 가장 먼 방향 (사이 또는 바깥 앨리). -maxAim ~ maxAim
+        float GapAim(float maxAim)
+        {
+            if (opponent == null || opponent2 == null) return AwayFromOpponent() * maxAim;
+            float best = 0f, bestGap = -1f;
+            for (float a = -maxAim; a <= maxAim + 1e-4f; a += 0.05f)
+            {
+                float x = a * MaxAimX;
+                float gap = Mathf.Min(Mathf.Abs(x - opponent.position.x * Facing), Mathf.Abs(x - opponent2.position.x * Facing));
+                if (gap > bestGap + 0.01f || (Mathf.Abs(gap - bestGap) <= 0.01f && Roll(0.5f)))
+                {
+                    best = a;
+                    bestGap = gap;
+                }
+            }
+            return best;
         }
 
         // 플레이어와 같은 규칙: 걷기보다 빠르면 스테미너를 쓰고, 바닥나면 회복될 때까지 걷는다
@@ -258,7 +356,7 @@ namespace FirstPersonTennis
             if (!swing.HasLanding) return false;
             Vector3 p = swing.LandingPoint;
             if (Court.SideOf(p.z) != Side) return false;
-            return ball.IsServe ? !Court.IsInServiceBox(p, Side, ball.ServeToDeuce) : !Court.IsInSingles(p, Side);
+            return ball.IsServe ? !Court.IsInServiceBox(p, Side, ball.ServeToDeuce) : !Court.IsInPlay(p, Side);
         }
 
         // 높이 뜬 공(로브)이면 스매시로 바꾼다. 궤적을 읽은 뒤 한 번만 정한다.
@@ -276,9 +374,9 @@ namespace FirstPersonTennis
 
         // ── 친 뒤 위치 ────────────────────────────────────────
 
-        void OnBallLaunched(int hitter)
+        // 내가 공을 친 직후 (복식에서 팀원이 친 공은 해당 없음)
+        void OnOwnShot()
         {
-            if (hitter != Side) return;
             Vector3 contact = ball.State.Position;
             SurfaceProfile court = Court.Surface;
 
@@ -297,7 +395,7 @@ namespace FirstPersonTennis
             outgoing.Simulate(ball.State, Court.Surface);
             float landingX = outgoing.FirstBounceIndex >= 0 ? outgoing.FirstBouncePoint.x : 0f;
             float shade = landingX * 0.4f * profile.anticipation;
-            recoverSpot = new Vector3(Mathf.Clamp(shade, -Court.SinglesHalfWidth, Court.SinglesHalfWidth), 0f,
+            recoverSpot = new Vector3(Mathf.Clamp(shade, -Court.PlayHalfWidth, Court.PlayHalfWidth), 0f,
                 atNet ? NetDepth : Baseline);
         }
 
@@ -317,6 +415,7 @@ namespace FirstPersonTennis
             hasPlan = true;
             smashDecided = false;
             tacticDecided = false;
+            chasing = false;
             reactionTimer = 0f;
 
             bool misjudge = Roll(profile.misjudgeChance);
@@ -334,9 +433,7 @@ namespace FirstPersonTennis
         ShotIntent PickShot()
         {
             var intent = new ShotIntent { Type = ShotType.Topspin, Depth = 1f, Aim = ChooseAim(0.75f) };
-            float opponentDepth = opponent != null ? opponent.position.z * -Side : Court.HalfLength;
-            bool opponentAtNet = opponentDepth < Court.ServiceLine + 0.5f;
-            bool opponentDeep = opponentDepth > Court.HalfLength - 1f;
+            bool opponentAtNet = ClosestOpponentDepth() < Court.ServiceLine + 0.5f; // 복식은 한 명이라도
             SurfaceProfile court = Court.Surface;
 
             if (opponentAtNet)
@@ -349,7 +446,7 @@ namespace FirstPersonTennis
                 }
                 else
                 {
-                    intent.Aim = AwayFromOpponent() * Range(0.6f, 0.95f); // 패싱샷
+                    intent.Aim = Doubles ? GapAim(0.95f) : AwayFromOpponent() * Range(0.6f, 0.95f); // 패싱샷
                 }
                 return intent;
             }
@@ -392,8 +489,7 @@ namespace FirstPersonTennis
 
             // 베이스라인 안쪽까지 들어온 짧은 공 + 상대가 뒤에 있음: 드롭샷 기회
             float contactDepth = Mathf.Abs(spot.z);
-            float opponentDepth = opponent != null ? opponent.position.z * -Side : Court.HalfLength;
-            if (contactDepth < Court.HalfLength - 2f && opponentDepth > Court.HalfLength - 1f &&
+            if (contactDepth < Court.HalfLength - 2f && ClosestOpponentDepth() > Court.HalfLength - 1f && // 상대가 모두 뒤에
                 Roll(Mathf.Clamp01(profile.dropShotChance * 4f * character.dropShotTendency + court.aiDropShotBonus)))
             {
                 planned.Type = ShotType.Slice;
@@ -405,10 +501,10 @@ namespace FirstPersonTennis
         // 네트 앞: 빈 곳으로 기본 발리, 상대가 뒤에 있으면 가끔 드롭 발리, 가끔 깊은 발리
         ShotIntent PickVolley()
         {
-            var intent = new ShotIntent { Type = ShotType.Topspin, Depth = 1f, Aim = AwayFromOpponent() * Range(0.5f, 0.9f) };
-            float opponentDepth = opponent != null ? opponent.position.z * -Side : Court.HalfLength;
+            float aim = Doubles ? GapAim(0.9f) : AwayFromOpponent() * Range(0.5f, 0.9f);
+            var intent = new ShotIntent { Type = ShotType.Topspin, Depth = 1f, Aim = aim };
             double roll = rng.NextDouble();
-            if (opponentDepth > Court.HalfLength - 1f && roll < 0.2 * character.dropShotTendency)
+            if (ClosestOpponentDepth() > Court.HalfLength - 1f && roll < 0.2 * character.dropShotTendency)
                 intent.Type = ShotType.Slice;
             else if (roll > 0.9)
                 intent.Type = ShotType.Lob;
@@ -419,7 +515,8 @@ namespace FirstPersonTennis
         float ChooseAim(float maxAim)
         {
             maxAim = Mathf.Min(0.95f, maxAim * character.aimBoldness);
-            if (Roll(profile.smartAim)) return AwayFromOpponent() * Range(Mathf.Min(0.4f, maxAim), maxAim);
+            if (Roll(profile.smartAim))
+                return Doubles ? GapAim(maxAim) : AwayFromOpponent() * Range(Mathf.Min(0.4f, maxAim), maxAim);
             return Range(-maxAim, maxAim);
         }
 

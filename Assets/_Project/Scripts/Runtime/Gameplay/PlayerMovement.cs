@@ -22,6 +22,10 @@ namespace FirstPersonTennis
         bool serveLock;
         float serveMinX, serveMaxX, serveZ;
 
+        AutoSwing swing; // 스윙 중에는 발을 멈춘다
+
+        void Awake() => swing = GetComponent<AutoSwing>();
+
         void Start() => FaceNet();
 
         public void LockForServe(float minX, float maxX, float z)
@@ -55,6 +59,14 @@ namespace FirstPersonTennis
                 sprintHeld = false;
             }
 
+            // 스윙을 시작하면 임팩트까지 발을 멈춘다: 몸이 공을 지나쳐 헛스윙하지 않게 (실제 선수처럼 자리를 잡고 친다)
+            bool planted = swing != null && swing.IsSwinging && config.swingPlantDeceleration > 0f;
+            if (planted)
+            {
+                input = Vector2.zero;
+                sprintHeld = false;
+            }
+
             float facing = Court.Facing(side);
             var wish = new Vector3(input.x * facing, 0f, input.y * facing);
             bool moving = input.sqrMagnitude > 0.01f;
@@ -63,7 +75,8 @@ namespace FirstPersonTennis
             float speed = (IsSprinting ? config.runSpeed : config.walkSpeed) * Stats.MoveScale *
                           Court.DirectionSpeedScale(wish, side, config.backwardSpeedScale); // 뒷걸음은 느리다
             Vector3 target = wish * speed;
-            Velocity = Vector3.MoveTowards(Velocity, target, Court.MoveRate(Velocity, target, config.acceleration, Stats.SlideScale) * Time.deltaTime);
+            float rate = planted ? config.swingPlantDeceleration : Court.MoveRate(Velocity, target, config.acceleration, Stats.SlideScale);
+            Velocity = Vector3.MoveTowards(Velocity, target, rate * Time.deltaTime);
             UpdateStamina(Time.deltaTime);
 
             transform.position = Clamp(transform.position + Velocity * Time.deltaTime);
