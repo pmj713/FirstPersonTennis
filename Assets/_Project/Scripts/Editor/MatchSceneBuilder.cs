@@ -140,6 +140,7 @@ namespace FirstPersonTennis.EditorTools
             Set(flow, "config", config);
             Set(flow, "referee", referee);
             Set(flow, "tutorial", tutorial);
+            Set(flow, "menuMusic", LoadTitleMusic());
 
             // 카메라 + 소리
             var camGo = new GameObject("Main Camera") { tag = "MainCamera" };

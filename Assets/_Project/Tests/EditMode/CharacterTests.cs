@@ -27,7 +27,7 @@ namespace FirstPersonTennis.Tests
             Assert.AreEqual(1f, s.PowerScale, 1e-5f);
             Assert.AreEqual(1f, s.ErrorScale, 1e-5f);
             Assert.AreEqual(1f, s.SpinScale, 1e-5f);
-            Assert.AreEqual(1.075f, s.MoveScale, 1e-5f);
+            Assert.AreEqual(1.1f, s.MoveScale, 1e-5f); // 속도 50 → 50/100 × 0.2 = +10%
             Assert.AreEqual(1f, s.RecoveryScale, 1e-5f);
             Assert.AreEqual(1f, s.SlideScale, 1e-5f);
         }

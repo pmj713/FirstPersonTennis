@@ -24,10 +24,14 @@ namespace FirstPersonTennis
             source.volume = 0f;
         }
 
-        void Start()
+        void OnEnable()
         {
+            elapsed = 0f;
+            source.volume = 0f;
             if (source.clip != null && !source.isPlaying) source.Play();
         }
+
+        void OnDisable() => source.Stop();
 
         void Update()
         {

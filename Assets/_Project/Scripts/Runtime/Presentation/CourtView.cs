@@ -21,6 +21,14 @@ namespace FirstPersonTennis
 
         bool dirty;
         Mesh netMesh;
+        const int NetColumns = 80, NetRows = 8;
+        const float RippleDuration = NetRipple.Duration;
+        Vector3[] netRest, netVertices;
+        TennisBall observedBall;
+        struct Impact { public Vector3 Point; public float Speed, Started; }
+        readonly Impact[] impacts = new Impact[4];
+        int nextImpact;
+        bool netMoving;
         Renderer groundRenderer, surfaceRenderer;
         MaterialPropertyBlock block;
 
@@ -31,12 +39,37 @@ namespace FirstPersonTennis
             TennisConfig.Changed += OnConfigChanged;
             Court.SurfaceChanged += ApplySurfaceColors;
             Rebuild();
+            if (Application.isPlaying) BindBall();
+        }
+
+        void Start() { if (Application.isPlaying) BindBall(); }
+
+        void BindBall()
+        {
+            if (observedBall != null) return;
+            foreach (var ball in FindObjectsByType<TennisBall>())
+            {
+                if (ball.gameObject.scene != gameObject.scene) continue;
+                observedBall = ball;
+                observedBall.NetImpact += OnNetImpact;
+                break;
+            }
+        }
+
+        void OnNetImpact(Vector3 point, Vector3 velocity)
+        {
+            impacts[nextImpact] = new Impact { Point = transform.InverseTransformPoint(point),
+                Speed = transform.InverseTransformVector(velocity).z, Started = Time.time };
+            nextImpact = (nextImpact + 1) % impacts.Length;
+            netMoving = true;
         }
 
         void OnDisable()
         {
             TennisConfig.Changed -= OnConfigChanged;
             Court.SurfaceChanged -= ApplySurfaceColors;
+            if (observedBall != null) observedBall.NetImpact -= OnNetImpact;
+            observedBall = null;
             if (!Application.isPlaying) Clear();
         }
 
@@ -73,9 +106,8 @@ namespace FirstPersonTennis
 
         void Update()
         {
-            if (!dirty) return;
-            dirty = false;
-            Rebuild();
+            if (dirty) { dirty = false; Rebuild(); }
+            if (Application.isPlaying && netMoving && netMesh != null) AnimateNet();
         }
 
         public void Rebuild()
@@ -109,6 +141,9 @@ namespace FirstPersonTennis
             for (int i = transform.childCount - 1; i >= 0; i--) Remove(transform.GetChild(i).gameObject);
             if (netMesh != null) Remove(netMesh);
             netMesh = null;
+            netRest = netVertices = null;
+            netMoving = false;
+            System.Array.Clear(impacts, 0, impacts.Length);
         }
 
         void BuildLines()
@@ -139,34 +174,80 @@ namespace FirstPersonTennis
             var netGo = new GameObject("Net");
             netGo.transform.SetParent(transform, false);
             float x = Court.NetPostX;
-            netMesh = new Mesh { name = "Net" };
-            netMesh.vertices = new[]
+            int gridCount = (NetColumns + 1) * (NetRows + 1);
+            netRest = new Vector3[gridCount + (NetColumns + 1) * 4];
+            var triangles = new int[NetColumns * NetRows * 6];
+            var tapeTriangles = new int[NetColumns * 12];
+            for (int column = 0; column <= NetColumns; column++)
             {
-                new Vector3(-x, 0f, 0f), new Vector3(x, 0f, 0f), new Vector3(x, Court.NetPostHeight, 0f),
-                new Vector3(0f, Court.NetCenterHeight, 0f), new Vector3(-x, Court.NetPostHeight, 0f),
-            };
-            netMesh.triangles = new[] { 0, 4, 3, 0, 3, 1, 1, 3, 2 };
+                float px = Mathf.Lerp(-x, x, column / (float)NetColumns);
+                float height = Court.NetHeightAt(px);
+                for (int row = 0; row <= NetRows; row++)
+                    netRest[column * (NetRows + 1) + row] = new Vector3(px, height * row / NetRows, 0f);
+                for (int face = 0; face < 2; face++)
+                {
+                    int t = gridCount + column * 4 + face * 2;
+                    netRest[t] = new Vector3(px, height - 0.05f, face == 0 ? -0.006f : 0.006f);
+                    netRest[t + 1] = new Vector3(px, height, netRest[t].z);
+                }
+                if (column == NetColumns) continue;
+                for (int row = 0; row < NetRows; row++)
+                {
+                    int v = column * (NetRows + 1) + row, next = v + NetRows + 1;
+                    int t = (column * NetRows + row) * 6;
+                    triangles[t] = v; triangles[t + 1] = v + 1; triangles[t + 2] = next;
+                    triangles[t + 3] = next; triangles[t + 4] = v + 1; triangles[t + 5] = next + 1;
+                }
+                for (int face = 0; face < 2; face++)
+                {
+                    int v = gridCount + column * 4 + face * 2, t = column * 12 + face * 6;
+                    tapeTriangles[t] = v; tapeTriangles[t + 1] = face == 0 ? v + 1 : v + 4;
+                    tapeTriangles[t + 2] = face == 0 ? v + 4 : v + 1;
+                    tapeTriangles[t + 3] = v + 4; tapeTriangles[t + 4] = face == 0 ? v + 1 : v + 5;
+                    tapeTriangles[t + 5] = face == 0 ? v + 5 : v + 1;
+                }
+            }
+            netVertices = (Vector3[])netRest.Clone();
+            netMesh = new Mesh { name = "Net", subMeshCount = 2 };
+            netMesh.MarkDynamic();
+            netMesh.vertices = netVertices;
+            netMesh.SetTriangles(triangles, 0);
+            netMesh.SetTriangles(tapeTriangles, 1);
             netMesh.RecalculateNormals();
             netGo.AddComponent<MeshFilter>().sharedMesh = netMesh;
             var netRenderer = netGo.AddComponent<MeshRenderer>();
-            netRenderer.sharedMaterial = net;
+            netRenderer.sharedMaterials = new[] { net, line };
             netRenderer.shadowCastingMode = ShadowCastingMode.Off;
 
-            float slope = Mathf.Atan2(Court.NetPostHeight - Court.NetCenterHeight, x) * Mathf.Rad2Deg;
-            float tapeLength = new Vector2(x, Court.NetPostHeight - Court.NetCenterHeight).magnitude;
-            float tapeY = (Court.NetPostHeight + Court.NetCenterHeight) / 2f - 0.025f;
             foreach (float s in new[] { -1f, 1f })
             {
-                Transform tape = Primitive(PrimitiveType.Cube, "NetTape", netGo.transform, line);
-                tape.localPosition = new Vector3(s * x / 2f, tapeY, 0f);
-                tape.localRotation = Quaternion.Euler(0f, 0f, s * slope);
-                tape.localScale = new Vector3(tapeLength, 0.05f, 0.03f);
-
                 Transform pole = Primitive(PrimitiveType.Cylinder, "NetPost", netGo.transform, post);
                 pole.localPosition = new Vector3(s * x, Court.NetPostHeight / 2f, 0f);
                 pole.localScale = new Vector3(0.08f, Court.NetPostHeight / 2f, 0.08f);
             }
         }
+
+        void AnimateNet()
+        {
+            bool active = false;
+            for (int i = 0; i < impacts.Length; i++)
+                active |= impacts[i].Speed != 0f && Time.time - impacts[i].Started < RippleDuration;
+            for (int v = 0; v < netVertices.Length; v++)
+            {
+                Vector3 rest = netRest[v];
+                float offset = 0f;
+                for (int i = 0; i < impacts.Length; i++)
+                    offset += NetRipple.Deflection(rest, impacts[i].Point, impacts[i].Speed,
+                        Time.time - impacts[i].Started, Court.NetPostX);
+                netVertices[v] = rest + Vector3.forward * Mathf.Clamp(offset, -0.4f, 0.4f);
+            }
+            netMesh.vertices = netVertices;
+            netMesh.RecalculateNormals();
+            netMesh.RecalculateBounds();
+            netMoving = active;
+        }
+
+        void OnDestroy() { if (netMesh != null) Remove(netMesh); }
 
         static Transform Primitive(PrimitiveType type, string name, Transform parent, Material material)
         {
@@ -202,4 +283,26 @@ namespace FirstPersonTennis
             }
         }
     }
+
+    public static class NetRipple
+    {
+        public const float Duration = 2.5f;
+        // Localized damped wave; posts and the bottom edge remain attached.
+        public static float Deflection(Vector3 vertex, Vector3 impact, float speed, float age, float halfWidth)
+        {
+            if (age <= 0f || age >= Duration || halfWidth <= 0f) return 0f;
+            float edge = Mathf.Clamp01(1f - Mathf.Abs(vertex.x) / halfWidth);
+            float anchored = Mathf.Sin(edge * Mathf.PI * 0.5f) * Mathf.Clamp01(vertex.y / 0.25f);
+            float dx = vertex.x - impact.x, dy = vertex.y - impact.y;
+            float distance = Mathf.Sqrt(dx * dx + dy * dy * 2f);
+            float arrival = age - distance / 8f;
+            if (arrival <= 0f) return 0f;
+            float strength = Mathf.Clamp(speed * 0.012f, -0.32f, 0.32f);
+            float fade = 1f - age / Duration;
+            return strength * anchored * Mathf.Exp(-distance * 0.65f - arrival * 3f) *
+                   Mathf.Sin(arrival * 18f) * fade * fade;
+        }
+
+    }
+
 }

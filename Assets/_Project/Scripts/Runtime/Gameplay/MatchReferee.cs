@@ -471,6 +471,14 @@ namespace FirstPersonTennis
             ai.Feed(intent);
         }
 
+        // AI가 정한 점을 지나가는 공을 준다 (발리 연습)
+        public void FeedDrillThrough(Vector3 point, float speed, float spinRate)
+        {
+            crossedNet = false;
+            Phase = MatchPhase.Rally;
+            ai.FeedThrough(point, speed, spinRate);
+        }
+
         // 내 서브 연습 한 번: 서브 자리에 서고 AI는 대각선 리시브 자리에 선다
         public void SetupServeDrill(bool deuce)
         {

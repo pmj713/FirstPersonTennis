@@ -604,6 +604,7 @@ namespace FirstPersonTennis
 
         // 정해 준 구질로 공을 준다 (튜토리얼)
         public void Feed(ShotIntent intent) => swing.Feed(intent);
+        public void FeedThrough(Vector3 point, float speed, float spinRate) => swing.FeedThrough(point, speed, spinRate);
 
         bool Roll(float chance) => rng.NextDouble() < chance;
 

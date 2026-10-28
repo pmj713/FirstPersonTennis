@@ -81,6 +81,8 @@ namespace FirstPersonTennis
         public float smashIdealLateral = 0.4f;
         [Tooltip("스매시로 친 공의 템포 배율. 공 템포에 곱한다 (0.7 × 1.5 = 1.05). 1이면 다른 샷과 같은 템포")]
         [Range(1f, 3f)] public float smashTempoBoost = 1.5f;
+        [Tooltip("로브로 친 공의 템포 배율. 궤적(높이·깊이)은 같고 빨리 날아가, 네트에 붙은 상대가 물러날 시간이 줄어든다. 1이면 다른 샷과 같은 템포")]
+        [Range(1f, 3f)] public float lobTempoBoost = 1.4f;
 
         [Header("스윙")]
         [Tooltip("스윙 시작부터 임팩트까지 (초)")]

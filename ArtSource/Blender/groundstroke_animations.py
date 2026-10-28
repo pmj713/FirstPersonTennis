@@ -90,7 +90,7 @@ def torso_penalty(mats, arm, shoulder, elbow, wrist):
             penalty+=max(0.,1.-distance)**2
     return penalty
 
-def arm_pose(mats, arm, side, wrist, hint, hand=None, previous=None, finish=False):
+def arm_pose(mats, arm, side, wrist, hint, hand=None, previous=None, finish=False, wrist_bend=None, previous_rotation=None):
     """Anatomical elbow plane; forearm pronation is separated from wrist bending."""
     a=mats[side+'Arm'].translation
     l1=arm.data.bones[side+'Arm'].length
@@ -117,13 +117,30 @@ def arm_pose(mats, arm, side, wrist, hint, hand=None, previous=None, finish=Fals
             qf=qf@Quaternion((0,1,0),roll)
             bend_angle=v.angle(hand.col[1].to_3d())
             cost=(100 if finish else 15)*bend_angle**2+(0 if finish else 30)*max(0,abs(twist)-math.radians(85))**2+.2*math.radians(deg)**2
+        if previous_rotation is not None:
+            delta=previous_rotation.rotation_difference(qf).angle
+            delta=min(delta,2*math.pi-delta)
+            cost+=100*delta*delta
         cost+=10000*torso_penalty(mats,arm,a,elbow,wrist)
-        if previous is not None:cost+=(200 if finish else 1500)*(elbow-previous).length_squared
+        if previous is not None and finish:cost+=100000*max(0.,(elbow-previous).length-.045)**2
+        if previous is not None:cost+=(800 if finish else 1500)*(elbow-previous).length_squared
         if best is None or cost<best[0]:best=(cost,elbow,qu,qf)
     _,elbow,qu,qf=best
+    if previous_rotation is not None:
+        # Transport the previous forearm onto the new bone direction before adding pronation.
+        axis=Vector((0,1,0))
+        carried=(previous_rotation@axis).rotation_difference(qf@axis)@previous_rotation
+        relative=carried.inverted()@qf
+        if relative.w < 0: relative.negate()
+        step=2*math.atan2(relative.y,relative.w)
+        qf=carried@Quaternion(axis,max(-math.radians(20),min(math.radians(20),step)))
     mats[side+'Arm']=matrix(qu,a)
     mats[side+'ForeArm']=matrix(qf,elbow)
-    mats[side+'Hand']=matrix(qf if hand is None else hand.to_quaternion(),wrist)
+    hand_q=qf if hand is None else hand.to_quaternion()
+    if finish:
+        # The forearm carries axial rotation. Wrist flexion/deviation are authored separately.
+        hand_q=qf@wrist_bend
+    mats[side+'Hand']=matrix(hand_q,wrist)
 
 def correct(mats, arm, name, f, previous=None):
     ta.GRIP_ANGLE=math.radians(45 if name=='Backhand' else 0)
@@ -142,6 +159,7 @@ def correct(mats, arm, name, f, previous=None):
         hand_q=q@Quaternion((1,0,0),math.radians(-bend.x))@Quaternion((0,0,1),math.radians(bend.z))
     mats['RightHand']=matrix(hand_q,mats['RightHand'].translation)
     if name=='Forehand' and f==28 and previous is not None:
+        previous['FinishForearm']=q.copy()
         previous['FinishHand']=hand_q.copy()
         previous['LastFinishHand']=hand_q.copy()
         previous['Right']=mats['RightForeArm'].translation.copy()
@@ -154,7 +172,9 @@ def correct(mats, arm, name, f, previous=None):
         wrist=mats['RightHand'].translation.copy()
         direction=(wrist-mats['RightForeArm'].translation).normalized()
         y=(direction-shaft*direction.dot(shaft)).normalized()
-        x=-shaft;z=x.cross(y).normalized();y=z.cross(x).normalized()
+        x=-shaft
+        up=Vector((0,0,1))
+        z=(up-x*up.dot(x)).normalized();y=z.cross(x).normalized()
         target=matrix(Matrix((x,y,z)).transposed().to_quaternion(),wrist)
         ease=min(1.,(f-28)/4.);ease=ease*ease*(3-2*ease)
         if previous is not None and 'FinishHand' in previous:
@@ -164,7 +184,11 @@ def correct(mats, arm, name, f, previous=None):
             angle=min(angle,2*math.pi-angle)
             target=matrix(last.slerp(qtarget,min(1.,math.radians(32)/max(angle,1e-6))),wrist)
             previous['LastFinishHand']=target.to_quaternion()
-        arm_pose(mats,arm,'Right',wrist,hint,target,previous.get('Right') if previous else None,finish=True)
+        wrist_bend=Quaternion((1,0,0),math.radians(-10*(1-t)))@Quaternion((0,0,1),math.radians(-10-5*t))
+        # Solve the arm for the desired racket orientation after the modest wrist bend.
+        forearm_target=matrix(target.to_quaternion()@wrist_bend.inverted(),wrist)
+        arm_pose(mats,arm,'Right',wrist,hint,forearm_target,previous.get('Right') if previous else None,finish=True,wrist_bend=wrist_bend,previous_rotation=previous.get('FinishForearm') if previous else None)
+        if previous is not None: previous['FinishForearm']=mats['RightForeArm'].to_quaternion()
         if previous is not None:previous['Right']=mats['RightForeArm'].translation.copy()
     if name=='Backhand':
         racket=mats['RightHand']@ta.racket_in_hand()

@@ -195,7 +195,8 @@ namespace FirstPersonTennis
                 if (skip) break;
 
                 Watch();
-                referee.FeedDrill(FeedFor(task.Drill));
+                if (task.Drill == TutorialDrill.Net) FeedVolley();
+                else referee.FeedDrill(FeedFor(task.Drill));
                 float start = Time.time;
                 while (outcome == Outcome.None && !skip)
                 {
@@ -343,16 +344,32 @@ namespace FirstPersonTennis
         static Vector3 BaselineSpot(int side) => new Vector3(0f, 0f, (Court.HalfLength + 0.8f) * side);
         static Vector3 NetSpot(int side) => new Vector3(0f, 0f, Court.ServiceLine * 0.5f * side);
 
-        // 연습용 공: 스트로크는 조금 느린 탑스핀, 스매시는 내 코트 깊숙이 떨어지는 로브, 발리는 몸 쪽으로 오는 낮은 공
+        // 연습용 공: 스트로크는 조금 느린 탑스핀, 스매시는 내 코트 깊숙이 떨어지는 로브 (발리는 FeedVolley)
         ShotIntent FeedFor(TutorialDrill drill)
         {
             float pace = config.feedSpeedScale > 0f ? config.feedSpeedScale : 1f;
             return drill switch
             {
                 TutorialDrill.Lob => new ShotIntent { Type = ShotType.Lob, Aim = Range(-0.2f, 0.2f), Depth = 0.3f },
-                TutorialDrill.Net => new ShotIntent { Type = ShotType.Topspin, Aim = Range(-0.1f, 0.1f), Depth = 1f, SpeedScale = 0.8f * pace },
                 _ => new ShotIntent { Type = ShotType.Topspin, Aim = Range(-0.3f, 0.3f), Depth = 1f, SpeedScale = 0.85f * pace },
             };
+        }
+
+        // 발리 연습 공: 네트 앞 선수의 포핸드 쪽 가슴 높이로 낮게 지나가는 공. 깊이로 정하면 코트가 길 때 머리 위로 넘어가서
+        // 지나갈 점을 정하고 궤적을 맞춘다. 빠르기는 거리에 비례 (공이 커서 공기 저항이 커 너무 느리면 닿지 못한다)
+        const float VolleyFeedHeight = 1.15f;
+
+        public static float VolleyFeedSpeed(float distance) => Mathf.Clamp(distance * 1.1f, 18f, 28f);
+
+        void FeedVolley()
+        {
+            float pace = config.feedSpeedScale > 0f ? config.feedSpeedScale : 1f;
+            float facing = Court.Facing(player.Side);
+            Vector3 point = player.transform.position +
+                            new Vector3((config.idealLateral + Range(-0.25f, 0.25f)) * facing, VolleyFeedHeight, 0f);
+            Vector3 from = referee.Ai.FeedContact;
+            float distance = new Vector2(point.x - from.x, point.z - from.z).magnitude;
+            referee.FeedDrillThrough(point, VolleyFeedSpeed(distance) * pace, config.topspin.spin * 0.3f);
         }
 
         float Range(float min, float max) => min + (max - min) * (float)rng.NextDouble();

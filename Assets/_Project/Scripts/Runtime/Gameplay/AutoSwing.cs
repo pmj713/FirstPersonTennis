@@ -280,6 +280,18 @@ namespace FirstPersonTennis
             Strike(intent, contact, config.idealLateral, false, false, false);
         }
 
+        // 정한 점을 지나가게 공을 준다 (튜토리얼 발리 연습: 네트 앞 선수의 몸 쪽으로 낮게)
+        public void FeedThrough(Vector3 point, float speed, float spinRate)
+        {
+            Vector3 contact = FeedContact;
+            ball.Hold(contact);
+            if (racket != null) racket.PlaySwing(StrokeSide.Forehand, ShotType.Topspin, 0.05f, contact);
+            ShotSolution solution = ShotSolver.SolveThrough(contact, point, speed, spinRate, Court.Surface);
+            LastShot = new ShotRecord { Intent = ShotIntent.Default, Contact = contact };
+            ball.Launch(side, solution.Velocity, solution.Spin, 1f);
+            Hit?.Invoke();
+        }
+
         public Vector3 FeedContact => transform.position +
             new Vector3(config.idealLateral * Facing, config.idealHeight, config.contactForward * Facing);
 
@@ -445,10 +457,11 @@ namespace FirstPersonTennis
                 ApplyAimError(ref velocity, ref spin, azimuth, elevation);
             }
 
-            // 머리 위에서 친 스매시는 빠르게 날아간다
+            // 머리 위에서 친 스매시와 로브는 빠르게 날아간다 (발리 중 로브 입력은 깊은 발리라 그대로)
             bool overhead = intent.Type == ShotType.Smash && contact.y >= config.smashMinHeight;
+            bool lob = intent.Type == ShotType.Lob && !volley;
             LastShot = new ShotRecord { Intent = intent, Contact = contact, Volley = volley, Auto = auto };
-            ball.Launch(side, velocity, spin, overhead ? config.smashTempoBoost : 1f);
+            ball.Launch(side, velocity, spin, overhead ? config.smashTempoBoost : lob ? config.lobTempoBoost : 1f);
             Hit?.Invoke();
             if (withError) Struck?.Invoke(quality);
         }

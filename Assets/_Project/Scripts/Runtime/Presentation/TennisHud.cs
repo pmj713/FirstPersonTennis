@@ -29,11 +29,6 @@ namespace FirstPersonTennis
             "T 슬로모션 · Esc 일시정지 · H 도움말",
         };
 
-        // 자유 경기 메뉴의 모드. 튜토리얼은 메인 화면에서 시작한다. 경기는 싱글플레이 단계를 모두 깨야 열린다
-        static readonly GameMode[] MenuModes = { GameMode.Match, GameMode.Practice, GameMode.Watch };
-        static readonly string[] ModeNames = { "경기", "랠리 연습", "AI 대결 관전" };
-        static readonly string[] LockedModeNames = { "경기 · 잠김", "랠리 연습", "AI 대결 관전" };
-        static readonly string[] MatchTypeNames = { "단식", "복식 (2 대 2)" };
         static readonly string[] FormatNames ={ "타이브레이크", "숏세트 (4게임)", "1세트", "3세트 (2선승)" };
         static readonly string[] DifficultyNames = { "쉬움", "보통", "어려움" };
         static readonly string[] CourtNames = { "하드", "클레이", "잔디" };
@@ -54,20 +49,14 @@ namespace FirstPersonTennis
         [System.NonSerialized] readonly SettingsPanel settingsPanel = new SettingsPanel(); // 메인 화면과 같은 설정 화면
         Texture2D dot;
 
-        // 시작 메뉴 선택
-        GameMode menuMode = GameMode.Match;
-        MatchRules menuRules;
-        AiDifficulty menuDifficulty;
-        int menuPlayerCharacter, menuAiCharacter, menuPartnerCharacter, menuAi2Character;
-        string[] characterNames;
+        // 경기 메뉴 (경기 씬을 바로 열었을 때만. 게임에서는 메인 화면의 자유 경기에서 고른다). 메인 화면과 같은 고르기 화면
+        [System.NonSerialized] FreePlayPanel freePlay;
 
         void Start()
         {
-            menuRules = config.defaultRules;
-            menuDifficulty = config.defaultDifficulty;
-            menuPlayerCharacter = menuPartnerCharacter = config.defaultPlayerCharacter;
-            menuAiCharacter = menuAi2Character = config.defaultAiCharacter;
-            if (!StageProgress.AllCleared) menuMode = GameMode.Practice; // 경기가 잠겨 있으면 열린 모드부터
+            FreePlayChoice choice = GameLaunch.HasFreePlay ? GameLaunch.FreePlay : FreePlayChoice.Default(config);
+            choice.court = Court.Type;
+            freePlay = new FreePlayPanel(choice);
             dot = CreateDotTexture();
         }
 
@@ -246,7 +235,7 @@ namespace FirstPersonTennis
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
 
             GUI.Label(new Rect(w - 430f, 12f, 420f, 24f),
-                (cameraRig.ThirdPerson ? "3인칭 (디버그)" : "1인칭") + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
+                cameraRig.ViewLabel + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
                 $" · 공 템포 {config.ballTimeScale:0.00}" +
                 (Time.timeScale > 0f && Time.timeScale < 1f ? " · 슬로모션" : ""),
                 smallRight);
@@ -266,125 +255,33 @@ namespace FirstPersonTennis
 
         // ── 메뉴와 오버레이 ───────────────────────────────────
 
-        // 왼쪽: 모드·단식/복식·경기 방식·코트·난이도, 오른쪽: 선수 (복식이면 네 명)
+        // 경기 씬을 바로 열었을 때의 메뉴 (에디터·테스트). 게임에서는 메인 화면의 자유 경기에서 같은 화면으로 고른다
         void DrawMenu(float w, float h)
         {
             Fill(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.55f));
-            bool matchLike = menuMode == GameMode.Match || menuMode == GameMode.Watch;
-            float pw = Mathf.Min(1000f, w - 40f), ph = Mathf.Min(matchLike ? 620f : 540f, h - 20f);
+            float pw = Mathf.Min(1000f, w - 40f), ph = Mathf.Min(640f, h - 20f);
             var panel = new Rect((w - pw) / 2f, (h - ph) / 2f, pw, ph);
             Fill(panel, new Color(0.05f, 0.08f, 0.12f, 0.92f));
-            GUI.Label(new Rect(panel.x, panel.y + 18f, pw, 44f), "1인칭 테니스", big);
+            GUI.Label(new Rect(panel.x, panel.y + 18f, pw, 44f), "자유 경기", big);
 
-            float cw = (pw - 90f) / 2f;
-            float x = panel.x + 30f, y = panel.y + 80f;
-            DrawCharacterPicker(new Rect(x + cw + 30f, y, cw, 420f), matchLike && menuRules.doubles);
-
-            bool matchLocked = !StageProgress.AllCleared;
-            GUI.Label(new Rect(x, y, cw, 26f), "모드", small);
-            int modeIndex = GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), Mathf.Max(0, System.Array.IndexOf(MenuModes, menuMode)),
-                matchLocked ? LockedModeNames : ModeNames, toolbar);
-            menuMode = MenuModes[modeIndex];
-            y += 76f;
-
-            // 잠긴 경기: 설정은 보이되 고를 수 없고 시작도 못 한다
-            bool locked = matchLocked && menuMode == GameMode.Match;
-            GUI.enabled = !locked;
-
-            if (matchLike)
+            var area = new Rect(panel.x + 30f, panel.y + 80f, pw - 60f, ph - 80f - 130f);
+            if (freePlay.Draw(area, skin, config)) // 선수를 바꾸면 뒤의 선수 모델도 바로
             {
-                GUI.Label(new Rect(x, y, cw, 26f), "단식 · 복식", small);
-                menuRules.doubles = GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), menuRules.doubles ? 1 : 0, MatchTypeNames, toolbar) == 1;
-                y += 76f;
-                GUI.Label(new Rect(x, y, cw, 26f), "경기 방식", small);
-                menuRules.format = (MatchFormat)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuRules.format, FormatNames, toolbar);
-                y += 76f;
-                menuRules.noAd = GUI.Toggle(new Rect(x, y, cw, 30f), menuRules.noAd, "  노애드 (듀스에서 다음 1점으로 게임 결정)", button);
-                y += 44f;
+                FreePlayChoice c = freePlay.Choice;
+                referee.SetCharacters(c.player, c.ai, c.partner, c.ai2);
             }
-            else
-            {
-                GUI.Label(new Rect(x, y, cw, 100f), "점수 없이 상대가 주는 공으로 랠리만 합니다.\n서브는 경기 모드에서 연습하세요.", small);
-                y += 120f;
-            }
-
-            GUI.Label(new Rect(x, y, cw, 26f), "코트", small);
-            var court = (CourtType)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)Court.Type, CourtNames, toolbar);
-            if (court != Court.Type) config.SelectCourt(court); // 고르는 즉시 뒤의 코트가 바뀐다
-            y += 76f;
-
-            GUI.Label(new Rect(x, y, cw, 26f), "AI 난이도", small);
-            menuDifficulty = (AiDifficulty)GUI.Toolbar(new Rect(x, y + 26f, cw, 36f), (int)menuDifficulty, DifficultyNames, toolbar);
-            if (!locked && menuDifficulty == AiDifficulty.Easy && menuMode != GameMode.Watch)
-                GUI.Label(new Rect(x, y + 66f, cw, 24f), "보조 켜짐: 낙하 지점 마커 · 타격 범위 알림 · 자동 기본 스트로크", small);
-            GUI.enabled = true;
-
-            if (locked)
-                GUI.Label(new Rect(panel.x, panel.yMax - 112f, pw, 30f),
-                    $"경기는 싱글플레이 {SinglePlayStages.Count}단계를 모두 깨면 열려요 (클리어 {StageProgress.ClearedCount} / {SinglePlayStages.Count})", subBanner);
+            bool locked = freePlay.Choice.Locked;
+            if (locked) GUI.Label(new Rect(panel.x, panel.yMax - 112f, pw, 30f), FreePlayPanel.LockNote, subBanner);
 
             if (GUI.Button(new Rect(panel.x + 30f, panel.yMax - 72f, 140f, 50f), "설정", button)) settingsPanel.Open();
-            // 이 메뉴는 메인 화면 → 싱글플레이 → 자유 경기에서 온다. 돌아가면 싱글플레이 창이 열려 있다
             if (flow != null)
             {
-                if (GUI.Button(new Rect(panel.xMax - 170f, panel.yMax - 72f, 140f, 50f), "메인 화면", button)) flow.ToTitle(true);
+                if (GUI.Button(new Rect(panel.xMax - 170f, panel.yMax - 72f, 140f, 50f), "메인 화면", button)) flow.ToTitle(true, true);
             }
             else if (GUI.Button(new Rect(panel.xMax - 170f, panel.yMax - 72f, 140f, 50f), "게임 종료", button)) confirmQuit = true;
             GUI.enabled = !locked;
-            if (GUI.Button(new Rect(panel.center.x - 120f, panel.yMax - 72f, 240f, 50f), "시작", button))
-            {
-                referee.SetCharacters(menuPlayerCharacter, menuAiCharacter, menuPartnerCharacter, menuAi2Character);
-                if (menuMode == GameMode.Match) referee.StartMatch(menuRules, menuDifficulty);
-                else if (menuMode == GameMode.Watch) referee.StartWatch(menuRules, menuDifficulty);
-                else referee.StartPractice(menuDifficulty);
-            }
+            if (GUI.Button(new Rect(panel.center.x - 120f, panel.yMax - 72f, 240f, 50f), "시작", button)) freePlay.Choice.StartOn(referee, config);
             GUI.enabled = true;
-        }
-
-        // 같은 선수를 여럿이 동시에 골라도 된다. 복식이면 네 명을 설명 없이 짧게
-        void DrawCharacterPicker(Rect area, bool doubles)
-        {
-            CharacterPreset[] roster = config.characters;
-            if (roster == null || roster.Length == 0) return;
-            if (characterNames == null || characterNames.Length != roster.Length) characterNames = new string[roster.Length];
-            for (int i = 0; i < roster.Length; i++) characterNames[i] = roster[i].name;
-
-            float y = area.y, step = doubles ? 100f : 140f;
-            bool watch = menuMode == GameMode.Watch;
-            int player = PickCharacter(new Rect(area.x, y, area.width, 130f),
-                watch ? (doubles ? "AI 1팀 1 (가까운 쪽)" : "AI 1 선수 (가까운 쪽)") : "내 선수", menuPlayerCharacter, roster, !doubles);
-            y += step;
-            int partner = menuPartnerCharacter;
-            if (doubles)
-            {
-                partner = PickCharacter(new Rect(area.x, y, area.width, 130f), watch ? "AI 1팀 2" : "파트너 (AI)", menuPartnerCharacter, roster, false);
-                y += step;
-            }
-            int ai = PickCharacter(new Rect(area.x, y, area.width, 130f),
-                watch ? (doubles ? "AI 2팀 1 (먼 쪽)" : "AI 2 선수 (먼 쪽)") : doubles ? "상대 1 (AI)" : "상대 선수 (AI)", menuAiCharacter, roster, !doubles);
-            y += step;
-            int ai2 = menuAi2Character;
-            if (doubles) ai2 = PickCharacter(new Rect(area.x, y, area.width, 130f), watch ? "AI 2팀 2" : "상대 2 (AI)", menuAi2Character, roster, false);
-
-            if (player != menuPlayerCharacter || ai != menuAiCharacter || partner != menuPartnerCharacter || ai2 != menuAi2Character)
-            {
-                menuPlayerCharacter = player;
-                menuAiCharacter = ai;
-                menuPartnerCharacter = partner;
-                menuAi2Character = ai2;
-                referee.SetCharacters(player, ai, partner, ai2);
-            }
-        }
-
-        int PickCharacter(Rect r, string label, int selected, CharacterPreset[] roster, bool withDescription)
-        {
-            selected = Mathf.Clamp(selected, 0, roster.Length - 1);
-            GUI.Label(new Rect(r.x, r.y, r.width, 26f), label, small);
-            selected = GUI.Toolbar(new Rect(r.x, r.y + 26f, r.width, 36f), selected, characterNames, toolbar);
-            CharacterPreset c = roster[selected];
-            GUI.Label(new Rect(r.x, r.y + 64f, r.width, 30f), $"힘 {c.power} · 기술 {c.technique} · 속도 {c.speed}", withDescription ? text : small);
-            if (withDescription) GUI.Label(new Rect(r.x, r.y + 94f, r.width, 24f), c.description, small);
-            return selected;
         }
 
         void DrawPause(float w, float h)
@@ -435,7 +332,7 @@ namespace FirstPersonTennis
 
             float y = panel.yMax - 74f, bw = 160f;
             if (GUI.Button(new Rect(panel.center.x - bw * 1.5f - 12f, y, bw, 48f), "처음부터", button)) tutorial.Begin();
-            if (GUI.Button(new Rect(panel.center.x - bw / 2f, y, bw, 48f), "랠리 연습", button)) referee.StartPractice(menuDifficulty);
+            if (GUI.Button(new Rect(panel.center.x - bw / 2f, y, bw, 48f), "랠리 연습", button)) referee.StartPractice(freePlay.Choice.difficulty);
             if (GUI.Button(new Rect(panel.center.x + bw / 2f + 12f, y, bw, 48f), MenuLabel, button)) BackToMenu();
         }
 
@@ -515,8 +412,8 @@ namespace FirstPersonTennis
             if (GUI.Button(new Rect(panel.center.x + 10f, y, 220f, 48f), MenuLabel, button)) BackToMenu();
         }
 
-        // 메인 화면에서 시작한 단계 도전·튜토리얼은 메인 화면으로, 자유 경기는 경기 메뉴로 돌아간다
-        string MenuLabel => flow != null && (flow.InStage || flow.LaunchedFromTitle && referee.Mode == GameMode.Tutorial) ? "메인 화면" : "메뉴로";
+        // 메인 화면에서 시작했으면 메인 화면으로 (자유 경기는 메인 화면의 자유 경기로), 경기 씬을 바로 열었으면 경기 메뉴로
+        string MenuLabel => flow == null || !flow.LaunchedFromTitle ? "메뉴로" : flow.InFreePlay ? "자유 경기 메뉴" : "메인 화면";
 
         void BackToMenu()
         {
@@ -689,7 +586,7 @@ namespace FirstPersonTennis
         {
             var box = new Rect(w / 2f - 300f, h - 92f, 600f, 74f);
             Fill(box, new Color(0f, 0f, 0f, 0.45f));
-            GUI.Label(new Rect(box.x, box.y + 4f, box.width, 26f), "AI 대결 관전 · Esc 일시정지 · V 시점 전환", smallCenter);
+            GUI.Label(new Rect(box.x, box.y + 4f, box.width, 26f), "AI 대결 관전 · Esc 일시정지 · V: AI 1 → AI 2 → 심판", smallCenter);
             DrawAiStamina(new Rect(box.x + 20f, box.y + 48f, 250f, 14f), referee.PlayerSide, referee.NearAi);
             DrawAiStamina(new Rect(box.xMax - 270f, box.y + 48f, 250f, 14f), referee.AiSide, referee.Ai);
         }

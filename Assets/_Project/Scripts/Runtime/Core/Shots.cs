@@ -104,6 +104,45 @@ namespace FirstPersonTennis
             return best;
         }
 
+        // 정한 점을 지나가는 낮은 궤적 (튜토리얼 발리 연습 공): 속도를 정하고, 그 점까지의 수평 거리에서 높이가 맞는
+        // 가장 낮은 발사각을 찾는다. 코트 길이와 상관없이 네트 앞 선수의 몸 쪽으로 온다.
+        // Success = 네트를 넘고 그 점을 높이 오차 0.15m 안으로 지난다
+        public static ShotSolution SolveThrough(Vector3 from, Vector3 through, float speed, float spinRate, in SurfaceProfile surface)
+        {
+            Horizontal(from, through, out Vector3 dir, out float distance);
+            Vector3 spin = SpinFor(dir, spinRate);
+            float lo = -10f, hi = 45f;
+            for (int i = 0; i < 24; i++)
+            {
+                float mid = 0.5f * (lo + hi);
+                if (HeightAt(from, dir, distance, speed, mid, spin, surface) >= through.y) hi = mid;
+                else lo = mid; // 낮거나 그 전에 바운드·네트
+            }
+            var solution = new ShotSolution { Velocity = Launch(dir, speed, hi), Spin = spin };
+            Fly(from, solution.Velocity, spin, surface, out solution.Landing, out solution.NetClearance);
+            float height = HeightAt(from, dir, distance, speed, hi, spin, surface);
+            solution.Success = solution.NetClearance >= NetMargin && Mathf.Abs(height - through.y) <= 0.15f;
+            return solution;
+        }
+
+        // 수평 거리 distance에 닿는 순간의 높이. 그 전에 바운드하거나 네트에 걸리면 -1
+        static float HeightAt(Vector3 from, Vector3 dir, float distance, float speed, float angle, Vector3 spin,
+            in SurfaceProfile surface)
+        {
+            var s = new BallState(from, Launch(dir, speed, angle), spin);
+            for (int i = 0; i < MaxFlightSteps; i++)
+            {
+                Vector3 prev = s.Position;
+                StepEvents ev = BallPhysics.Integrate(ref s, surface);
+                if (ev.HitNet || ev.Bounced) return -1f;
+                float along = Vector3.Dot(s.Position - from, dir);
+                if (along < distance) continue;
+                float prevAlong = Vector3.Dot(prev - from, dir);
+                return Mathf.Lerp(prev.y, s.Position.y, (distance - prevAlong) / Mathf.Max(1e-5f, along - prevAlong));
+            }
+            return -1f;
+        }
+
         // 발사각을 고정하고 속도를 찾는다 (로브).
         public static ShotSolution SolveFixedAngle(Vector3 from, Vector3 target, float angle, float spinRate,
             in SurfaceProfile surface)

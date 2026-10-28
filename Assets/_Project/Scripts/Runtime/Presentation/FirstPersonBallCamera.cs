@@ -6,7 +6,7 @@ namespace FirstPersonTennis
 {
     // 1인칭: 머리 위치에서 공을 따라본다. 회전 속도에 상한을 둬서 급회전(멀미)을 막는다.
     // 복식에서는 우리 코트 쪽에서 파트너가 받거나 친 공은 상대 코트 쪽을 보면서 공 쪽으로 조금만 고개를 돌린다.
-    // V 키로 비교 테스트용 3인칭 디버그 카메라로 전환. [ ] 키로 시야각 조절.
+    // V: 직접 플레이는 1/3인칭, AI 관전은 AI 1 → AI 2 → 심판. [ ]: 시야각 조절.
     // 시야각은 16:9 기준 수평값이고 세로 시야각을 고정하므로, 창이 넓으면 옆이 더 보이고 좁아도 왜곡되지 않는다.
     [RequireComponent(typeof(Camera))]
     public class FirstPersonBallCamera : MonoBehaviour
@@ -23,7 +23,18 @@ namespace FirstPersonTennis
         [SerializeField] float maxPitch = 75f;
         [SerializeField] Vector3 thirdPersonOffset = new Vector3(0f, 3.2f, -6.5f);
 
+        public enum WatchView { Ai1, Ai2, Umpire }
+        public WatchView CurrentWatchView { get; private set; }
+        public static WatchView NextWatchView(WatchView view) => (WatchView)(((int)view + 1) % 3);
         public bool ThirdPerson { get; private set; }
+        public string ViewLabel => watching ? CurrentWatchView switch
+        {
+            WatchView.Ai1 => "AI 1 시점", WatchView.Ai2 => "AI 2 시점", _ => "심판 시점",
+        } : ThirdPerson ? "3인칭 (디버그)" : "1인칭";
+        MatchReferee referee;
+        bool watching, snapWatch;
+        Renderer[] hiddenAi;
+        ShadowCastingMode[] originalShadows;
         public float HorizontalFov => UserSettings.HorizontalFov(config.horizontalFov); // 설정 화면에서도 바꾼다
         public bool FollowingBall { get; private set; }
 
@@ -42,22 +53,47 @@ namespace FirstPersonTennis
             serve = player.GetComponent<PlayerServe>();
         }
 
-        void Start() => ApplyVisibility();
+        void OnEnable() { if (cam != null) { snapWatch = true; ApplyVisibility(); } }
+
+        void Start()
+        {
+            foreach (var match in FindObjectsByType<MatchReferee>())
+                if (match.Player == player) { referee = match; break; }
+            ApplyVisibility();
+        }
+
+        void UpdateWatchMode()
+        {
+            bool next = referee != null && referee.Watching;
+            if (next == watching) return;
+            watching = next;
+            CurrentWatchView = WatchView.Ai1;
+            snapWatch = true;
+            ApplyVisibility();
+        }
 
         void LateUpdate()
         {
+            UpdateWatchMode();
             Keyboard kb = Keyboard.current;
             if (kb != null)
             {
                 if (kb.vKey.wasPressedThisFrame)
                 {
-                    ThirdPerson = !ThirdPerson;
+                    if (watching) { CurrentWatchView = NextWatchView(CurrentWatchView); snapWatch = true; }
+                    else ThirdPerson = !ThirdPerson;
                     ApplyVisibility();
                 }
                 if (kb.leftBracketKey.wasPressedThisFrame) ChangeFov(-FovStep);
                 if (kb.rightBracketKey.wasPressedThisFrame) ChangeFov(FovStep);
             }
 
+            if (watching)
+            {
+                UpdateWatchCamera();
+                cam.fieldOfView = Camera.HorizontalToVerticalFieldOfView(HorizontalFov, ReferenceAspect);
+                return;
+            }
             float dt = Time.unscaledDeltaTime;
             float facing = Court.Facing(player.Side);
             Vector3 body = player.transform.position;
@@ -131,10 +167,62 @@ namespace FirstPersonTennis
             return Quaternion.Euler(Mathf.Clamp(pitch, -maxPitch, maxPitch), e.y, 0f);
         }
 
+        void UpdateWatchCamera()
+        {
+            AiOpponent targetAi = CurrentWatchView == WatchView.Ai1 ? referee.NearAi : referee.Ai;
+            bool umpire = CurrentWatchView == WatchView.Umpire;
+            if (!umpire && targetAi == null) return;
+            Vector3 position = umpire
+                ? new Vector3(Court.NetPostX + 1.0f, 2.7f, 0f)
+                : targetAi.transform.position + Vector3.up * config.eyeHeight;
+            Vector3 target = ball.IsLive ? ball.transform.position : umpire
+                ? new Vector3(0f, 0.6f, 0f)
+                : new Vector3(0f, 1f, Court.HalfLength * 0.6f * Court.Facing(
+                    CurrentWatchView == WatchView.Ai1 ? referee.PlayerSide : referee.AiSide));
+            transform.position = position;
+            Vector3 direction = target - position;
+            if (direction.sqrMagnitude > 1e-4f)
+            {
+                Quaternion look = ClampPitch(Quaternion.LookRotation(direction));
+                float dt = Time.unscaledDeltaTime, turn = UserSettings.CameraTurnSpeed;
+                Quaternion smooth = Quaternion.Slerp(transform.rotation, look, 1f - Mathf.Exp(-turnSharpness * turn * dt));
+                transform.rotation = snapWatch ? look : Quaternion.RotateTowards(transform.rotation, smooth, maxTurnSpeed * turn * dt);
+                snapWatch = false;
+            }
+            FollowingBall = ball.IsLive;
+        }
+
+        void RestoreAiVisibility()
+        {
+            if (hiddenAi == null) return;
+            for (int i = 0; i < hiddenAi.Length; i++)
+                if (hiddenAi[i] != null) hiddenAi[i].shadowCastingMode = originalShadows[i];
+            hiddenAi = null;
+            originalShadows = null;
+        }
+
+        void OnDisable()
+        {
+            RestoreAiVisibility();
+            foreach (Renderer r in hideInFirstPerson ?? System.Array.Empty<Renderer>())
+                if (r != null) r.shadowCastingMode = ShadowCastingMode.On;
+        }
+
         void ApplyVisibility()
         {
-            foreach (Renderer r in hideInFirstPerson)
-                if (r != null) r.shadowCastingMode = ThirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+            RestoreAiVisibility();
+            foreach (Renderer r in hideInFirstPerson ?? System.Array.Empty<Renderer>())
+                if (r != null) r.shadowCastingMode = !watching && ThirdPerson ? ShadowCastingMode.On : ShadowCastingMode.ShadowsOnly;
+            if (!watching || CurrentWatchView == WatchView.Umpire) return;
+            AiOpponent ai = CurrentWatchView == WatchView.Ai1 ? referee.NearAi : referee.Ai;
+            if (ai == null) return;
+            hiddenAi = ai.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            originalShadows = new ShadowCastingMode[hiddenAi.Length];
+            for (int i = 0; i < hiddenAi.Length; i++)
+            {
+                originalShadows[i] = hiddenAi[i].shadowCastingMode;
+                hiddenAi[i].shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+            }
         }
     }
 }

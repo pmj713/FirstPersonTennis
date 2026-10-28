@@ -105,6 +105,14 @@ namespace FirstPersonTennis.Tests
             yield return LoadTitle();
             var menu = Object.FindAnyObjectByType<TitleMenu>();
             Assert.AreEqual(0, menu.SelectedStage);
+            // 싱글플레이 → 난이도를 골라야 단계가 나온다. 보통은 쉬움 3단계를 다 깨야 열린다
+            menu.OpenSinglePlay();
+            Assert.AreEqual(-1, menu.SelectedDifficulty);
+            menu.SelectDifficulty(1);
+            Assert.AreEqual(-1, menu.SelectedDifficulty, "보통은 잠겨 있다");
+            menu.SelectDifficulty(0);
+            Assert.AreEqual(0, menu.SelectedDifficulty);
+            Assert.AreEqual(0, menu.SelectedStage, "쉬움을 고르면 아직 못 깬 첫 단계가 골라진다");
             menu.StartStage(1); // 잠긴 단계는 시작하지 않는다
             yield return null;
             Assert.AreEqual(GameLaunch.TitleScene, SceneManager.GetActiveScene().name);
@@ -147,6 +155,7 @@ namespace FirstPersonTennis.Tests
             menu = Object.FindAnyObjectByType<TitleMenu>();
             Assert.IsTrue(menu.SinglePlayOpen, "싱글플레이 창이 열린 채로 돌아온다");
             Assert.AreEqual(1, menu.SelectedStage, "다음에 도전할 단계가 골라져 있다");
+            Assert.AreEqual(0, menu.SelectedDifficulty, "그 단계의 난이도(쉬움)가 펼쳐져 있다");
             Assert.AreEqual(1f, Time.timeScale);
         }
 
@@ -166,20 +175,45 @@ namespace FirstPersonTennis.Tests
             Assert.IsFalse(Object.FindAnyObjectByType<TitleMenu>().SinglePlayOpen);
         }
 
+        // 싱글플레이 → 자유 경기: 메인 화면에서 고르면(뒤의 코트도 고른 코트로) 경기 씬에서 바로 그대로 시작한다.
+        // 잠긴 경기는 시작하지 않고, 메뉴로 나오면 메인 화면의 자유 경기로 돌아온다. 단계 기록에는 들어가지 않는다
         [UnityTest]
-        public IEnumerator FreePlayOpensTheMatchMenuAndStaysOutOfTheStageRecord()
+        public IEnumerator FreePlayIsChosenOnTheTitleAndStartsDirectly()
         {
             yield return LoadTitle();
-            Object.FindAnyObjectByType<TitleMenu>().StartFreePlay();
+            var menu = Object.FindAnyObjectByType<TitleMenu>();
+            menu.OpenSinglePlay();
+            menu.OpenFreePlay();
+            Assert.IsTrue(menu.FreePlayOpen);
+
+            FreePlayChoice choice = menu.FreePlayChoice;
+            choice.mode = GameMode.Match; // 단계를 다 깨기 전에는 잠김
+            menu.FreePlayChoice = choice;
+            menu.StartFreePlay();
+            yield return null;
+            Assert.AreEqual(GameLaunch.TitleScene, SceneManager.GetActiveScene().name, "잠긴 경기는 시작하지 않는다");
+
+            choice.mode = GameMode.Practice;
+            choice.court = CourtType.Clay;
+            choice.difficulty = AiDifficulty.Hard;
+            menu.FreePlayChoice = choice;
+            menu.StartFreePlay();
             yield return WaitForScene(GameLaunch.MatchScene);
             var referee = Object.FindAnyObjectByType<MatchReferee>();
             var flow = Object.FindAnyObjectByType<GameFlow>();
-            Assert.AreEqual(MatchPhase.Menu, referee.Phase);
+            Assert.AreEqual(GameMode.Practice, referee.Mode, "경기 메뉴 없이 바로 시작");
+            Assert.AreEqual(CourtType.Clay, Court.Type);
+            Assert.AreEqual(AiDifficulty.Hard, referee.Ai.Difficulty);
+            Assert.IsTrue(flow.InFreePlay);
             Assert.IsFalse(flow.InStage);
-            flow.BackToMenu(); // 자유 경기는 경기 메뉴에 그대로
-            yield return null;
-            Assert.AreEqual(GameLaunch.MatchScene, SceneManager.GetActiveScene().name);
-            Assert.AreEqual(MatchPhase.Menu, referee.Phase);
+
+            flow.BackToMenu();
+            yield return WaitForScene(GameLaunch.TitleScene);
+            menu = Object.FindAnyObjectByType<TitleMenu>();
+            Assert.IsTrue(menu.FreePlayOpen, "자유 경기를 연 채로 돌아온다");
+            Assert.AreEqual(CourtType.Clay, menu.FreePlayChoice.court, "지난번 선택이 남아 있다");
+            Assert.AreEqual(CourtType.Clay, Court.Type, "뒤의 코트도 고른 코트");
+            Assert.AreEqual(0, StageProgress.ClearedCount, "자유 경기는 단계 기록에 들어가지 않는다");
         }
 
         // 사람 대신: 서브는 이상적 높이에서, 랠리는 이상적 자리에 서서 좌우를 섞어 친다. 높이 뜬 공은 스매시

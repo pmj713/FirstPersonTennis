@@ -13,14 +13,26 @@ namespace FirstPersonTennis
         public static int StageIndex { get; private set; }
         public static int PlayerCharacter { get; private set; }
 
-        // 메인 화면으로 돌아왔을 때 싱글플레이 창을 바로 열지
+        // 자유 경기에서 고른 것. 메인 화면으로 돌아와도 지난번 선택이 남아 있다 (프로그램을 끄면 처음부터)
+        public static FreePlayChoice FreePlay { get; private set; }
+        public static bool HasFreePlay { get; private set; }
+
+        // 메인 화면으로 돌아왔을 때 싱글플레이 창(과 자유 경기)을 바로 열지
         public static bool OpenSinglePlay { get; set; }
+        public static bool OpenFreePlay { get; set; }
 
         public static void Request(LaunchKind kind, int stageIndex = 0, int playerCharacter = 0)
         {
             Pending = kind;
             StageIndex = stageIndex;
             PlayerCharacter = playerCharacter;
+        }
+
+        public static void RequestFreePlay(FreePlayChoice choice)
+        {
+            Request(LaunchKind.FreePlay, 0, choice.player);
+            FreePlay = choice;
+            HasFreePlay = true;
         }
 
         public static LaunchKind Take()

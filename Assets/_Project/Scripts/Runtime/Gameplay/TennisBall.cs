@@ -34,6 +34,7 @@ namespace FirstPersonTennis
         public event Action<int> Launched; // 친 쪽 side, 토스는 0
         public event Action<Vector3> Bounced;
         public event Action NetHit;
+        public event Action<Vector3, Vector3> NetImpact; // Impact position and incoming velocity.
         public event Action CrossedNet;
 
         const int MaxStepsPerFrame = 120;
@@ -119,10 +120,15 @@ namespace FirstPersonTennis
                 BeforeStep?.Invoke(StepIndex);
                 if (!IsLive) break; // BeforeStep에서 공을 잡았다 (서브 타격 전 토스 회수 등)
                 previousPosition = State.Position;
+                Vector3 incomingVelocity = State.Velocity;
                 StepEvents ev = BallPhysics.Integrate(ref State, Court.Surface);
                 StepIndex++;
 
-                if (ev.HitNet || ev.NetCord) TouchedNet = true;
+                if (ev.HitNet || ev.NetCord)
+                {
+                    TouchedNet = true;
+                    NetImpact?.Invoke(ev.NetPoint, incomingVelocity);
+                }
                 if (ev.HitNet) NetHit?.Invoke();
                 if (ev.CrossedNet) CrossedNet?.Invoke();
                 if (ev.Bounced)
