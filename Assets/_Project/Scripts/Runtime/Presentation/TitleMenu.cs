@@ -181,7 +181,8 @@ namespace FirstPersonTennis
         {
             EnsureStyles();
             GUI.depth = 0;
-            float w = Screen.width, h = Screen.height;
+            Vector2 screen = HudSkin.BeginScreen(); // 화면 크기·비율에 맞춘 UI 좌표
+            float w = screen.x, h = screen.y;
             if (settings.IsOpen)
             {
                 settings.Draw(w, h, skin, config.horizontalFov);

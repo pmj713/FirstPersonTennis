@@ -188,7 +188,8 @@ namespace FirstPersonTennis
         void OnGUI()
         {
             EnsureStyles();
-            float w = Screen.width, h = Screen.height;
+            Vector2 screen = HudSkin.BeginScreen(); // 화면 크기·비율에 맞춘 UI 좌표
+            float w = screen.x, h = screen.y;
 
             // 종료 확인과 설정은 시작 메뉴나 일시정지 메뉴에서 연다. 열려 있으면 아래 화면의 버튼이 눌리지 않게 그것만 그린다
             if (confirmQuit)
@@ -209,10 +210,26 @@ namespace FirstPersonTennis
             }
 
             bool tutorialMode = referee.Mode == GameMode.Tutorial;
-            float bannerY = h * 0.2f;
-            if (tutorialMode) bannerY = Mathf.Max(bannerY, DrawTutorial(w) + 8f); // 안내 패널 아래로
+            float bannerY = h * 0.2f, tutorialBottom = 0f;
+            if (tutorialMode)
+            {
+                tutorialBottom = DrawTutorial(w);
+                bannerY = Mathf.Max(bannerY, tutorialBottom + 8f); // 안내 패널 아래로
+            }
             else if (referee.Mode != GameMode.Practice) DrawScoreboard(w);
             else DrawPracticeScore(w);
+
+            // 오른쪽 위 시점·템포 정보. 좁은 화면에서 튜토리얼 안내 패널과 겹치면 패널 아래로 내린다
+            var info = new GUIContent(cameraRig.ViewLabel + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
+                                      $" · 공 템포 {config.ballTimeScale:0.00}" +
+                                      (Time.timeScale > 0f && Time.timeScale < 1f ? " · 슬로모션" : ""));
+            float infoY = 12f;
+            if (tutorialMode && (w + TutorialWidth(w)) / 2f + 10f > w - 10f - smallRight.CalcSize(info).x)
+            {
+                infoY = tutorialBottom + 4f;
+                bannerY = Mathf.Max(bannerY, infoY + 28f);
+            }
+            GUI.Label(new Rect(w - 430f, infoY, 420f, 24f), info, smallRight);
 
             if (Time.unscaledTime < messageUntil)
                 GUI.Label(new Rect(0f, bannerY, w, 52f), message, banner);
@@ -234,15 +251,9 @@ namespace FirstPersonTennis
             if (input.IsDragging)
                 DrawLine(ToGui(input.DragStart), ToGui(input.DragCurrent), 4f, new Color(1f, 1f, 1f, 0.85f));
 
-            GUI.Label(new Rect(w - 430f, 12f, 420f, 24f),
-                cameraRig.ViewLabel + $" · 시야각 {cameraRig.HorizontalFov:0}°" +
-                $" · 공 템포 {config.ballTimeScale:0.00}" +
-                (Time.timeScale > 0f && Time.timeScale < 1f ? " · 슬로모션" : ""),
-                smallRight);
-
-            if (showHelp && !tutorialMode) // 튜토리얼은 위 패널이 과제마다 조작을 알려 준다
+            if (HelpVisible)
             {
-                float top = h - 120f - 24f * HelpLines.Length;
+                float top = HelpTop(h);
                 Fill(new Rect(10f, top, 620f, 24f * HelpLines.Length + 12f), new Color(0f, 0f, 0f, 0.35f));
                 for (int i = 0; i < HelpLines.Length; i++)
                     GUI.Label(new Rect(20f, top + 6f + 24f * i, 610f, 24f), HelpLines[i], small);
@@ -252,6 +263,11 @@ namespace FirstPersonTennis
             else if (referee.Paused) DrawPause(w, h);
             else if (tutorial.Active && tutorial.Completed) DrawTutorialDone(w, h);
         }
+
+        // 왼쪽 아래 조작 도움말 (튜토리얼은 위 패널이 과제마다 조작을 알려 준다)
+        bool HelpVisible => showHelp && referee.Mode != GameMode.Tutorial;
+
+        static float HelpTop(float h) => h - 120f - 24f * HelpLines.Length;
 
         // ── 메뉴와 오버레이 ───────────────────────────────────
 
@@ -478,9 +494,11 @@ namespace FirstPersonTennis
         }
 
         // 튜토리얼: 단계와 과제, 진행, 방법. 패널 아래 끝 y를 돌려준다
+        static float TutorialWidth(float w) => Mathf.Min(860f, w - 40f);
+
         float DrawTutorial(float w)
         {
-            float pw = Mathf.Min(860f, w - 40f);
+            float pw = TutorialWidth(w);
             float hintHeight = smallCenter.CalcHeight(new GUIContent(tutorial.TaskHint), pw - 24f);
             var r = new Rect((w - pw) / 2f, 10f, pw, 72f + hintHeight);
             Fill(r, new Color(0f, 0f, 0f, 0.55f));
@@ -571,7 +589,10 @@ namespace FirstPersonTennis
             Color color = q.IsGood ? new Color(0.45f, 0.9f, 0.5f) :
                 q.IsFair ? new Color(1f, 0.8f, 0.3f) : new Color(1f, 0.45f, 0.4f);
             bool hasReasons = !string.IsNullOrEmpty(qualityReasons);
-            var r = new Rect(w / 2f - 220f, h * 0.64f, 440f, hasReasons ? 60f : 36f);
+            float height = hasReasons ? 60f : 36f;
+            float y = h * 0.64f;
+            if (HelpVisible) y = Mathf.Min(y, HelpTop(h) - height - 8f); // 낮은 화면에서 도움말과 겹치지 않게 위로
+            var r = new Rect(w / 2f - 220f, y, 440f, height);
             Fill(r, new Color(0f, 0f, 0f, 0.4f));
 
             Color previous = GUI.contentColor;
@@ -658,7 +679,7 @@ namespace FirstPersonTennis
             toolbar = skin.Toolbar;
         }
 
-        static Vector2 ToGui(Vector2 screen) => new Vector2(screen.x, Screen.height - screen.y);
+        static Vector2 ToGui(Vector2 screen) => HudSkin.ScreenToGui(screen);
 
         static void Fill(Rect r, Color color) => HudSkin.Fill(r, color);
 

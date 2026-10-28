@@ -83,6 +83,9 @@ namespace FirstPersonTennis
         [Range(1f, 3f)] public float smashTempoBoost = 1.5f;
         [Tooltip("로브로 친 공의 템포 배율. 궤적(높이·깊이)은 같고 빨리 날아가, 네트에 붙은 상대가 물러날 시간이 줄어든다. 1이면 다른 샷과 같은 템포")]
         [Range(1f, 3f)] public float lobTempoBoost = 1.4f;
+        [Tooltip("공격 로브: 상대가 공 길(착지점 앞)에 서 있으면 그 머리 위를 스매시가 닿는 높이(smashReachHeight)보다 이만큼 높게 " +
+                 "지나는 가장 낮은 궤적으로 친다 (m). 낮게 넘길수록 빨리 떨어지고 튄 뒤 멀리 달아나지만, 상대가 조금만 물러나도 닿는다")]
+        [Range(0f, 3f)] public float lobOverMargin = 1f;
 
         [Header("스윙")]
         [Tooltip("스윙 시작부터 임팩트까지 (초)")]

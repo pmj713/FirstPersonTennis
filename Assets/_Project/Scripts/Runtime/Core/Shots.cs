@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace FirstPersonTennis
@@ -149,14 +150,69 @@ namespace FirstPersonTennis
         {
             Horizontal(from, target, out Vector3 dir, out float distance);
             Vector3 spin = SpinFor(dir, spinRate);
-            float lo = 3f, hi = 45f;
-            for (int i = 0; i < 24; i++)
+            return Evaluate(from, dir, distance, SpeedForAngle(from, dir, distance, angle, spin, surface), angle, spin, surface);
+        }
+
+        public const float MinLobAngle = 12f;
+
+        // 공격 로브: target에 떨어지면서 over(상대가 선 곳) 위를 clearHeight 이상으로 지나는 가장 낮은 발사각.
+        // 낮을수록 빨리 넘어가 떨어지므로 상대가 물러날 시간이 짧다.
+        // 0 = 상대가 공 길에 없음 (착지점보다 뒤), maxAngle = maxAngle로 띄워도 못 넘김
+        public static float LowestAngleOver(Vector3 from, Vector3 target, Vector3 over, float clearHeight, float spinRate,
+            float maxAngle, in SurfaceProfile surface)
+        {
+            Horizontal(from, target, out Vector3 dir, out float distance);
+            float along = Vector3.Dot(over - from, dir);
+            if (along <= 0f || along >= distance) return 0f;
+            Vector3 spin = SpinFor(dir, spinRate);
+            if (!ClearsAt(from, dir, distance, along, clearHeight, maxAngle, spin, surface)) return maxAngle;
+            float lo = MinLobAngle, hi = maxAngle;
+            for (int i = 0; i < 7; i++) // 0.3° 안쪽
+
             {
                 float mid = 0.5f * (lo + hi);
-                if (Range(from, dir, mid, angle, spin, surface) >= distance) hi = mid;
-                else lo = mid;
+                if (ClearsAt(from, dir, distance, along, clearHeight, mid, spin, surface)) hi = mid;
+                else lo = mid; // 상대 손에 닿거나 네트에 걸림
             }
-            return Evaluate(from, dir, distance, hi, angle, spin, surface);
+            return hi;
+        }
+
+        static bool ClearsAt(Vector3 from, Vector3 dir, float distance, float along, float clearHeight, float angle,
+            Vector3 spin, in SurfaceProfile surface) =>
+            HeightAt(from, dir, along, SpeedForAngle(from, dir, distance, angle, spin, surface), angle, spin, surface) >= clearHeight;
+
+        // 이 발사각으로 distance에 첫 바운드가 떨어지는 속도. 사거리는 속도에 따라 매끄럽게 늘어나므로
+        // 할선법(일리노이)으로 몇 번 만에 찾는다 (착지 오차 1cm 안). 공격 로브는 각도마다 이걸 풀어서 빨라야 한다
+        static float SpeedForAngle(Vector3 from, Vector3 dir, float distance, float angle, Vector3 spin, in SurfaceProfile surface)
+        {
+            const float Tolerance = 0.01f;
+            float lo = 3f, hi = 45f;
+            float fLo = Range(from, dir, lo, angle, spin, surface) - distance;
+            float fHi = Range(from, dir, hi, angle, spin, surface) - distance;
+            if (fHi <= 0f) return hi;
+            if (fLo >= 0f) return lo;
+            int kept = 0; // 같은 쪽 끝이 연달아 남으면 그 값을 반으로 줄여 수렴을 빠르게 한다
+            for (int i = 0; i < 30; i++)
+            {
+                float v = (lo * fHi - hi * fLo) / (fHi - fLo);
+                float f = Range(from, dir, v, angle, spin, surface) - distance;
+                if (Mathf.Abs(f) <= Tolerance) return v;
+                if (f > 0f)
+                {
+                    hi = v;
+                    fHi = f;
+                    if (kept == -1) fLo *= 0.5f;
+                    kept = -1;
+                }
+                else
+                {
+                    lo = v;
+                    fLo = f; // 네트에 걸리면 Range가 -1이라 크게 모자란 쪽으로 본다
+                    if (kept == 1) fHi *= 0.5f;
+                    kept = 1;
+                }
+            }
+            return 0.5f * (lo + hi);
         }
 
         static bool TryFindLowAngle(Vector3 from, Vector3 dir, float distance, float speed, Vector3 spin,
@@ -263,8 +319,9 @@ namespace FirstPersonTennis
     public static class ShotPlanner
     {
         // power: 힘 스탯의 속도 배율, spinScale: 기술 스탯의 스핀 배율, aimMarginScale: 기술 스탯의 사이드라인 여유 배율 (1 = 기본)
+        // opponents: 상대 선수 위치 (로브가 네트 앞 상대의 머리 위를 넘긴다). 없으면 기본 로브
         public static ShotSolution Plan(TennisConfig config, ShotIntent intent, Vector3 contact, int hitterSide,
-            float power = 1f, float spinScale = 1f, float aimMarginScale = 1f)
+            float power = 1f, float spinScale = 1f, float aimMarginScale = 1f, IReadOnlyList<Vector3> opponents = null)
         {
             float facing = Court.Facing(hitterSide);
             float aim = Mathf.Clamp(intent.Aim, -1f, 1f);
@@ -317,8 +374,22 @@ namespace FirstPersonTennis
             float maxAimX = Court.PlayHalfWidth - config.aimMargin * aimMarginScale;
             var target = new Vector3(aim * maxAimX * facing, 0f, depth * facing);
             if (p.launchAngle > 0f)
-                return ShotSolver.SolveFixedAngle(contact, target, p.launchAngle, spin, Court.Surface);
+                return ShotSolver.SolveFixedAngle(contact, target, LobAngle(config, contact, target, p.launchAngle, spin, opponents),
+                    spin, Court.Surface);
             return ShotSolver.SolveDrive(contact, target, speed * speedScale * pace * power, spin, Court.Surface, minAngle);
+        }
+
+        // 공격 로브: 공 길(착지점 앞)에 선 상대마다 그 머리 위를 스매시가 닿지 않는 높이로 지나는 가장 낮은 각도를 구해,
+        // 모두 넘기는 각도로 친다. 낮게 넘길수록 빨리 떨어지고 튄 뒤 멀리 달아난다. 공 길에 아무도 없으면 기본 발사각
+        static float LobAngle(TennisConfig config, Vector3 contact, Vector3 target, float baseAngle, float spin,
+            IReadOnlyList<Vector3> opponents)
+        {
+            if (opponents == null) return baseAngle;
+            float clear = config.smashReachHeight + config.lobOverMargin;
+            float angle = 0f;
+            for (int i = 0; i < opponents.Count; i++)
+                angle = Mathf.Max(angle, ShotSolver.LowestAngleOver(contact, target, opponents[i], clear, spin, baseAngle, Court.Surface));
+            return angle > 0f ? angle : baseAngle;
         }
 
         // 발리: 클릭 = 기본 발리, ↓ = 드롭 발리 (길이 무관 짧게), ↑ = 깊은 발리 (로브 아님). 스매시는 Plan으로.

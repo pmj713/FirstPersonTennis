@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace FirstPersonTennis
@@ -84,6 +85,10 @@ namespace FirstPersonTennis
         public event Action<ShotQuality> Struck;  // 친 공의 타구 품질 (서브 포함)
         public event Action Hit;                  // 이 선수가 공을 쳤다 (서브·연습 공 포함). 복식에서 팀원의 샷과 구분한다
 
+        // 켜져 있는 선수 전부 (관전 중인 플레이어처럼 꺼 둔 선수는 빠진다)
+        static readonly List<AutoSwing> Active = new List<AutoSwing>();
+        static readonly List<Vector3> OpponentBuffer = new List<Vector3>();
+
         IShotIntentSource source;
         IMover mover;
         Trajectory trajectory;
@@ -112,12 +117,14 @@ namespace FirstPersonTennis
         {
             ball.BeforeStep += OnBeforeStep;
             ball.Launched += OnLaunched;
+            Active.Add(this);
         }
 
         void OnDisable()
         {
             ball.BeforeStep -= OnBeforeStep;
             ball.Launched -= OnLaunched;
+            Active.Remove(this);
         }
 
         void Update()
@@ -438,11 +445,21 @@ namespace FirstPersonTennis
         static ShotType VisualType(ShotType type, bool volley) =>
             volley && type != ShotType.Smash ? ShotType.Volley : type;
 
+        // 지금 코트에 나와 있는 상대 선수들의 위치 (로브가 네트 앞 상대의 머리 위를 넘긴다)
+        List<Vector3> OpponentPositions()
+        {
+            OpponentBuffer.Clear();
+            foreach (AutoSwing other in Active)
+                if (other.side == -side) OpponentBuffer.Add(other.transform.position);
+            return OpponentBuffer;
+        }
+
         void Strike(ShotIntent intent, Vector3 contact, float lateral, bool withError, bool volley, bool auto)
         {
             ShotSolution solution = volley
                 ? ShotPlanner.PlanVolley(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale)
-                : ShotPlanner.Plan(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale);
+                : ShotPlanner.Plan(config, intent, contact, side, Stats.PowerScale, Stats.SpinScale, Stats.AimMarginScale,
+                    intent.Type == ShotType.Lob ? OpponentPositions() : null);
             Vector3 velocity = solution.Velocity;
             Vector3 spin = solution.Spin;
 

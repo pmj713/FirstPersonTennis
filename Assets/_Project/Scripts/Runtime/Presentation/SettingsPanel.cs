@@ -73,7 +73,7 @@ namespace FirstPersonTennis
             if (!Mathf.Approximately(v, crowd)) UserSettings.CrowdVolume = v;
             y = rowY;
 
-            DrawDragPad(skin, new Rect(x, y + 4f, cw, Mathf.Max(80f, panel.yMax - 76f - (y + 4f))));
+            DrawDragPad(skin, new Rect(x, y + 4f, cw, Mathf.Max(80f, panel.yMax - 76f - (y + 4f))), h);
 
             float by = panel.yMax - 62f;
             if (GUI.Button(new Rect(x, by, 160f, 44f), "기본값으로", skin.Button))
@@ -98,8 +98,9 @@ namespace FirstPersonTennis
             return Mathf.Clamp(Mathf.Round(v / step) * step, min, max);
         }
 
-        // 연습 칸: 경기와 같은 계산(감도 곱하기, 데드존)으로 드래그를 구질로 바꿔 보여 준다. 화면 위쪽이 + 방향
-        void DrawDragPad(HudSkin skin, Rect pad)
+        // 연습 칸: 경기와 같은 계산(감도 곱하기, 데드존)으로 드래그를 구질로 바꿔 보여 준다. 화면 위쪽이 + 방향.
+        // screenHeight: UI 좌표로 본 화면 높이 (경기처럼 화면 높이에 대한 비율로 본다)
+        void DrawDragPad(HudSkin skin, Rect pad, float screenHeight)
         {
             HudSkin.Fill(pad, new Color(1f, 1f, 1f, 0.06f));
             Event e = Event.current;
@@ -120,7 +121,7 @@ namespace FirstPersonTennis
             if (padDragging)
             {
                 Vector2 d = padCurrent - padStart;
-                Vector2 delta = new Vector2(d.x, -d.y) / Mathf.Max(1, Screen.height) * UserSettings.DragSensitivity;
+                Vector2 delta = new Vector2(d.x, -d.y) / Mathf.Max(1f, screenHeight) * UserSettings.DragSensitivity;
                 padMaxRise = Mathf.Max(padMaxRise, delta.y);
                 intent = ShotGestureInput.Classify(delta, padMaxRise, UserSettings.DragDeadZone);
                 HudSkin.DrawLine(padStart, padCurrent, 4f, new Color(1f, 1f, 1f, 0.85f));

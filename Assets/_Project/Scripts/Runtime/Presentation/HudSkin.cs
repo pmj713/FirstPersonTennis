@@ -34,6 +34,31 @@ namespace FirstPersonTennis
             return s;
         }
 
+        // ── 화면 크기·비율 ─────────────────────────────────────
+        // UI는 픽셀 대신 UI 좌표로 그리고, GUI.matrix 배율로 화면에 맞춘다. 배율은 UI 좌표로 본 화면이 늘 1280×720 이상이
+        // 되게 정한다: 그보다 작거나 비율이 다른 화면(4:3 등)은 전체를 줄이고, 1920×1080보다 큰 화면은 그만큼 키운다.
+        // 그 사이(1280×720 ~ 1920×1080)는 1이라 글자가 선명하다. 배치는 1280×720 이상의 어떤 비율에서도 들어가게 짠다
+        public const float MinWidth = 1280f, MinHeight = 720f, BaseWidth = 1920f, BaseHeight = 1080f;
+
+        public static float ScaleFor(float screenWidth, float screenHeight)
+        {
+            float fit = Mathf.Min(screenWidth / MinWidth, screenHeight / MinHeight);
+            if (fit < 1f) return Mathf.Max(0.1f, fit);
+            return Mathf.Max(1f, Mathf.Min(screenWidth / BaseWidth, screenHeight / BaseHeight));
+        }
+
+        // OnGUI 처음에 부른다: 배율을 걸고 UI 좌표로 본 화면 크기를 돌려준다
+        public static Vector2 BeginScreen()
+        {
+            float scale = ScaleFor(Screen.width, Screen.height);
+            GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+            return new Vector2(Screen.width / scale, Screen.height / scale);
+        }
+
+        // 화면 픽셀 좌표(아래가 0, 입력 시스템) → UI 좌표
+        public static Vector2 ScreenToGui(Vector2 screen) =>
+            new Vector2(screen.x, Screen.height - screen.y) / ScaleFor(Screen.width, Screen.height);
+
         public static void Fill(Rect r, Color color)
         {
             Color previous = GUI.color;
@@ -46,7 +71,9 @@ namespace FirstPersonTennis
         {
             Matrix4x4 matrix = GUI.matrix;
             Vector2 d = b - a;
-            GUIUtility.RotateAroundPivot(Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg, a);
+            // a를 중심으로 돌린다. RotateAroundPivot은 배율이 걸려 있으면 중심이 어긋나서 직접 곱한다
+            GUI.matrix = matrix * Matrix4x4.TRS(a, Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg), Vector3.one) *
+                         Matrix4x4.Translate(-a);
             Fill(new Rect(a.x, a.y - width / 2f, d.magnitude, width), color);
             GUI.matrix = matrix;
         }

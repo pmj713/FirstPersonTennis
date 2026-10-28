@@ -59,10 +59,10 @@ MonoBehaviour:
     aiLobBonus: -0.03
     aiDropShotBonus: -0.02
   courtWidthScale: 2
-  courtLengthScale: 1.5
+  courtLengthScale: 1
   ballDiameter: 0.3
-  walkSpeed: 6
-  runSpeed: 12
+  walkSpeed: 5
+  runSpeed: 11
   acceleration: 30
   backwardSpeedScale: 0.6
   eyeHeight: 1.7
@@ -91,7 +91,7 @@ MonoBehaviour:
   swingWindup: 0.25
   takeBackLead: 0.9
   swingPlantDeceleration: 120
-  ballTimeScale: 1.1
+  ballTimeScale: 1
   shotSpeedScale: 1
   topspin:
     speed: 32
