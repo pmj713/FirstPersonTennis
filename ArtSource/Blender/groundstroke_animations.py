@@ -2,8 +2,9 @@
 
 Run Blender -b <existing tennis blend> --python this_file -- <out.blend> <out.fbx> <existing.fbx>.
 Contact remains frame 24, end 48. Backhand, other NLA actions and mesh data are preserved.
-AthleteAnimator applies the matching grip only in these two clips: forehand
-face rotation, and a diagonal backhand handle with a separately oriented face.
+AthleteAnimator applies the matching grip only in these two clips: a diagonal
+handle in both (the face looks where the palm does), and a separately oriented
+face for the backhand.
 """
 import sys, math
 from pathlib import Path
@@ -14,6 +15,25 @@ sys.path.insert(0, str(Path(__file__).parent))
 import tennis_animations as ta
 
 REBUILD_CLIPS = ('Forehand',)
+# Forehand grip: the face looks where the palm does and the handle crosses the palm diagonally, like the
+# backhand. In game AthleteAnimator lays the racket diagonally by this much about its face (Unity -45 about
+# forward == Blender +45 about the racket's Y); the markers on the hand stay at the ready grip.
+FOREHAND_DIAGONAL = 45
+# Racket after contact (character r, f, u): shaft handle -> head, and the face (palm side). The forearm
+# pronates, so the face closes and the racket lies down counter-clockwise from the player's eyes, flat
+# across the front, then goes behind the left shoulder.
+FOREHAND_SHAFT = {28: (.85,.45,.05), 31: (.35,.93,.05), 34: (-.45,.89,0), 37: (-.93,.35,-.05), 40: (-.30,-.95,.05)}
+FOREHAND_FACE = {28: (.05,.85,-.50), 31: (0,.35,-.94), 34: (0,0,-1), 37: (0,0,-1), 40: (0,0,-1)}
+WRIST_BEND = 60  # degrees the wrist may bend to hold the racket
+
+def path(keys, f):
+    """Direction keys, rotated along the shorter arc between neighbouring keys."""
+    fs=sorted(keys); f=max(fs[0],min(fs[-1],f))
+    for a,b in zip(fs,fs[1:]):
+        if a<=f<=b:
+            t=(f-a)/(b-a)
+            u,v=ta.D(*keys[a]),ta.D(*keys[b])
+            return Quaternion().slerp(u.rotation_difference(v),t)@u
 
 # Wrist targets, not racket-head positions. The finish stays beside the shoulder.
 # frame: (right wrist, shaft guide for authoring, free left wrist).
@@ -25,8 +45,8 @@ POSES = {
         16: ((.46,-.24,1.20),(.2,-.7,.65),(.10,.40,1.20)),
         20: ((.44,-.02,.98),(.3,-.9,-.2),(-.12,.32,1.13)),
         24: ((.34,.37,1.06),(1,.05,.1),(-.28,.18,1.08)),
-        28: ((.10,.55,1.22),(-.6,.4,.6),(-.32,.14,1.04)),
-        34: ((-.12,.46,1.32),(-.6,-.8,.1),(-.32,.10,1.02)),
+        28: ((.12,.62,1.18),(-.6,.4,.6),(-.32,.14,1.04)),
+        34: ((-.06,.62,1.28),(-.6,-.8,.1),(-.32,.10,1.02)),
         40: ((-.32,.12,1.40),(-.4,-.9,.05),(-.32,.10,1.02)),
         48: ((.10,.30,1.05),(-.3,.6,.7),(-.10,.34,1.10)),
     },
@@ -43,7 +63,7 @@ POSES = {
     },
 }
 ELBOWS = {
- 'Forehand': [( .30,.12,.95),(.36,-.10,1.02),(.40,-.22,1.02),(.32,-.05,.91),(.26,.10,.96),(.20,.24,1.03),(.04,.32,1.13),(.02,.28,1.13),(.30,.12,.95)],
+ 'Forehand': [( .30,.12,.95),(.36,-.10,1.02),(.40,-.22,1.02),(.32,-.05,.91),(.26,.10,.96),(.22,.35,1.20),(.10,.38,1.30),(.02,.28,1.13),(.30,.12,.95)],
  'Backhand': [(.25,.12,.95),(.12,.25,1.05),(.02,.30,1.12),(.03,.35,1.00),(.10,.32,1.03),(.20,.34,1.13),(.32,.27,1.16),(.33,.20,1.16),(.25,.12,.95)],
 }
 for name in POSES:
@@ -158,38 +178,6 @@ def correct(mats, arm, name, f, previous=None):
         bend=sample(keys,f,5)
         hand_q=q@Quaternion((1,0,0),math.radians(-bend.x))@Quaternion((0,0,1),math.radians(bend.z))
     mats['RightHand']=matrix(hand_q,mats['RightHand'].translation)
-    if name=='Forehand' and f==28 and previous is not None:
-        previous['FinishForearm']=q.copy()
-        previous['FinishHand']=hand_q.copy()
-        previous['LastFinishHand']=hand_q.copy()
-        previous['Right']=mats['RightForeArm'].translation.copy()
-    if name=='Forehand' and 28<f:
-        # Carry the head around the outside of the shoulder, not over the face.
-        t=min(1.,(f-28)/12.);t=t*t*(3-2*t)
-        # Sweep forward, left, then back; the shortest rotation cuts through the head.
-        angle=math.radians(-65+235*t)
-        shaft=Vector((math.sin(angle),-math.cos(angle),-.08*t)).normalized()
-        wrist=mats['RightHand'].translation.copy()
-        direction=(wrist-mats['RightForeArm'].translation).normalized()
-        y=(direction-shaft*direction.dot(shaft)).normalized()
-        x=-shaft
-        up=Vector((0,0,1))
-        z=(up-x*up.dot(x)).normalized();y=z.cross(x).normalized()
-        target=matrix(Matrix((x,y,z)).transposed().to_quaternion(),wrist)
-        ease=min(1.,(f-28)/4.);ease=ease*ease*(3-2*ease)
-        if previous is not None and 'FinishHand' in previous:
-            target=matrix(previous['FinishHand'].slerp(target.to_quaternion(),ease),wrist)
-            last=previous['LastFinishHand'];qtarget=target.to_quaternion()
-            angle=last.rotation_difference(qtarget).angle
-            angle=min(angle,2*math.pi-angle)
-            target=matrix(last.slerp(qtarget,min(1.,math.radians(32)/max(angle,1e-6))),wrist)
-            previous['LastFinishHand']=target.to_quaternion()
-        wrist_bend=Quaternion((1,0,0),math.radians(-10*(1-t)))@Quaternion((0,0,1),math.radians(-10-5*t))
-        # Solve the arm for the desired racket orientation after the modest wrist bend.
-        forearm_target=matrix(target.to_quaternion()@wrist_bend.inverted(),wrist)
-        arm_pose(mats,arm,'Right',wrist,hint,forearm_target,previous.get('Right') if previous else None,finish=True,wrist_bend=wrist_bend,previous_rotation=previous.get('FinishForearm') if previous else None)
-        if previous is not None: previous['FinishForearm']=mats['RightForeArm'].to_quaternion()
-        if previous is not None:previous['Right']=mats['RightForeArm'].translation.copy()
     if name=='Backhand':
         racket=mats['RightHand']@ta.racket_in_hand()
         s=racket.col[2].to_3d(); n=racket.col[1].to_3d()
@@ -201,6 +189,57 @@ def correct(mats, arm, name, f, previous=None):
         if previous is not None:previous['Left']=mats['LeftForeArm'].translation.copy()
     else:
         arm_pose(mats,arm,'Left',sample(keys,f,2),ta.P(-.4,.15,-.8))
+
+def grip_envelope(f):
+    """How far the in-game forehand grip is applied (AthleteAnimator: in over frames 0-8, out over 40-48)."""
+    t=max(0.,min(1.,f/8.,(48-f)/8.))
+    return t*t*(3-2*t)
+
+def regrip_forehand(frames, arm):
+    """Hold the forehand racket with a real grip and solve the right arm again.
+
+    The old forehand held the palm up and the game turned the racket 90 degrees about its shaft in the hand,
+    so the face looked along the fingers: pronation spun the racket in its own plane, and laying it down
+    needed more forearm roll than an arm has (it looked like a full turn). Until contact the racket moves
+    exactly as before and only the hand holds it differently; after contact it follows FOREHAND_SHAFT/FACE,
+    then returns to the ready racket. The forearm roll stays within reach, the wrist bends the rest.
+    """
+    ta.GRIP_ANGLE=0
+    marker=ta.racket_in_hand().to_quaternion()  # the racket markers on the hand (ready grip)
+    def grip(f):
+        return marker@Quaternion((0,1,0),math.radians(FOREHAND_DIAGONAL*grip_envelope(f)))
+    racket={f:frames[f]['RightHand'].to_quaternion()@marker@Quaternion((0,0,1),math.radians(-90*grip_envelope(f)))
+            for f in range(25)}
+    C=lambda v:(-v.x,-v.y,v.z)
+    contact=racket[24].to_matrix()
+    shafts={**FOREHAND_SHAFT,24:C(contact.col[2])};faces={**FOREHAND_FACE,24:C(contact.col[1])}
+    for f in range(25,41):
+        s,n=ta.racket_axes(path(shafts,f),path(faces,f))
+        racket[f]=Matrix((n.cross(s),n,s)).transposed().to_quaternion()
+    ready=frames[48]['RightHand'].to_quaternion()@marker
+    for f in range(41,49):racket[f]=racket[40].slerp(ready,1-grip_envelope(f))
+    elbow=None
+    for f,m in enumerate(frames):
+        before={b:m[b].copy() for b in ('RightArm','RightForeArm','RightHand')}
+        hand=racket[f]@grip(f).inverted()
+        wrist=m['RightHand'].translation.copy()
+        hint=sample(POSES['Forehand'],f,3)-(wrist+m['RightArm'].translation)/2
+        # arm_pose keeps the forearm roll within 85 degrees of thumb-up, like an arm
+        arm_pose(m,arm,'Right',wrist,hint,matrix(hand,wrist),elbow)
+        fore=m['RightForeArm'].to_quaternion()
+        # The wrist only bends (no roll of its own) toward the racket, up to WRIST_BEND
+        rel=fore.inverted()@hand
+        if rel.w<0:rel.negate()
+        bend=rel@Quaternion((rel.w,0,rel.y,0)).normalized().inverted()
+        if bend.angle>math.radians(WRIST_BEND):bend=Quaternion().slerp(bend,math.radians(WRIST_BEND)/bend.angle)
+        m['RightHand']=matrix(fore@bend,m['RightHand'].translation)
+        # Start and end on the ready pose as it was (the same hand can be reached with another forearm roll),
+        # so blending in from the ready clip does not turn the forearm
+        w=grip_envelope(f)
+        if w<1:
+            for b,old in before.items():
+                m[b]=matrix(old.to_quaternion().slerp(m[b].to_quaternion(),w),old.translation.lerp(m[b].translation,w))
+        elbow=m['RightForeArm'].translation.copy()
 
 def replace_takes(existing, generated):
     """Keep the existing FBX verbatim at element level except the selected animation graphs.
@@ -300,6 +339,7 @@ def main():
                     old=arm.pose.bones[bone].matrix
                     mats[bone]=matrix(old.to_quaternion().slerp(mats[bone].to_quaternion(),w),old.translation.lerp(mats[bone].translation,w))
             frames.append(mats)
+        if name=='Forehand':regrip_forehand(frames,arm)
         act=bpy.data.actions.new(name+'_corrected'); ad.action=act; last={}
         for f,mats in enumerate(frames):
             for bone in rig.order:

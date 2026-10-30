@@ -168,7 +168,9 @@ namespace FirstPersonTennis
         }
 
         // Preserve the grasp point when changing the groundstroke grip.
-        // Backhand lays the handle diagonally across the palm; other shots keep their grip.
+        // Forehand and backhand lay the handle diagonally across the palm (the face still looks where the palm
+        // does) and the backhand also turns its face; groundstroke_animations.py authors the hand for these
+        // grips. Other shots keep their grip.
         void ApplyGroundstrokeGrip(Clip active, float seconds, float blend)
         {
             if (racket == null) return;
@@ -176,8 +178,8 @@ namespace FirstPersonTennis
             float frame = seconds * Fps;
             float t = forehand || backhand ? Mathf.Clamp01(Mathf.Min(frame / 8f, (48f - frame) / 8f)) : 0f;
             t = t * t * (3f - 2f * t) * blend;
-            Quaternion diagonal = Quaternion.AngleAxis(backhand ? -45f * t : 0f, Vector3.forward);
-            racket.localRotation = racketRest * diagonal * Quaternion.AngleAxis((backhand ? -20f : 90f) * t, Vector3.up);
+            Quaternion diagonal = Quaternion.AngleAxis(forehand || backhand ? -45f * t : 0f, Vector3.forward);
+            racket.localRotation = racketRest * diagonal * Quaternion.AngleAxis(backhand ? -20f * t : 0f, Vector3.up);
             Vector3 grasp = racketRestPosition + racketRest * (Vector3.up * 0.09f);
             racket.localPosition = grasp - racket.localRotation * (Vector3.up * 0.09f);
         }
