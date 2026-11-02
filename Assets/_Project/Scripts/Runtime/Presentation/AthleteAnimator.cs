@@ -160,25 +160,27 @@ namespace FirstPersonTennis
                 {
                     if (Animator.StringToHash(asset.name) != c.Hash || sweetAtContact.ContainsKey(c.Hash)) continue;
                     asset.SampleAnimation(model.gameObject, c.Contact); // 다음 프레임에 애니메이터가 덮어쓴다
-                    ApplyGroundstrokeGrip(c, c.Contact, 1f);
+                    ApplyRacketGrip(c, c.Contact, 1f);
                     sweetAtContact[c.Hash] = hips.InverseTransformPoint(SweetSpot());
                 }
             }
-            ApplyGroundstrokeGrip(default, 0f, 0f);
+            ApplyRacketGrip(default, 0f, 0f);
         }
 
-        // Preserve the grasp point when changing the groundstroke grip.
-        // Forehand and backhand lay the handle diagonally across the palm (the face still looks where the palm
-        // does) and the backhand also turns its face; groundstroke_animations.py authors the hand for these
-        // grips. Other shots keep their grip.
-        void ApplyGroundstrokeGrip(Clip active, float seconds, float blend)
+        // Preserve the grasp point when changing the grip.
+        // Forehand, backhand, the serves and the smash lay the handle diagonally across the palm (the face still
+        // looks where the palm does), in over the first 8 frames and out over the last 8, and the backhand also turns
+        // its face; groundstroke_animations.py authors the hand for these grips. Other shots keep their grip.
+        void ApplyRacketGrip(Clip active, float seconds, float blend)
         {
             if (racket == null) return;
-            bool forehand = active.Hash == Forehand.Hash, backhand = active.Hash == Backhand.Hash;
+            bool backhand = active.Hash == Backhand.Hash;
+            bool laid = backhand || active.Hash == Forehand.Hash || active.Hash == Smash.Hash
+                || active.Hash == Serve.Hash || active.Hash == ServeSlice.Hash || active.Hash == ServeKick.Hash;
             float frame = seconds * Fps;
-            float t = forehand || backhand ? Mathf.Clamp01(Mathf.Min(frame / 8f, (48f - frame) / 8f)) : 0f;
+            float t = laid ? Mathf.Clamp01(Mathf.Min(frame / 8f, (active.End * Fps - frame) / 8f)) : 0f;
             t = t * t * (3f - 2f * t) * blend;
-            Quaternion diagonal = Quaternion.AngleAxis(forehand || backhand ? -45f * t : 0f, Vector3.forward);
+            Quaternion diagonal = Quaternion.AngleAxis(-45f * t, Vector3.forward);
             racket.localRotation = racketRest * diagonal * Quaternion.AngleAxis(backhand ? -20f * t : 0f, Vector3.up);
             Vector3 grasp = racketRestPosition + racketRest * (Vector3.up * 0.09f);
             racket.localPosition = grasp - racket.localRotation * (Vector3.up * 0.09f);
@@ -329,7 +331,7 @@ namespace FirstPersonTennis
         // 애니메이터가 뼈를 움직인 뒤(LateUpdate)에 덮어쓴다.
         void LateUpdate()
         {
-            ApplyGroundstrokeGrip(clip, time, weight);
+            ApplyRacketGrip(clip, time, weight);
             float w = ReachWeight();
             Vector3 shift = Vector3.zero;
             if (model != null) model.localPosition = Vector3.zero; // 지난 프레임에 옮긴 몸을 되돌리고 잰다

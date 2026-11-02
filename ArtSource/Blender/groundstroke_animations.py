@@ -1,10 +1,10 @@
-"""Rebuild only Forehand on TennisPlayer_Tennis.blend.
+"""Rebuild Forehand and correct the serves and the smash (overhead_animations.py) on TennisPlayer_Tennis.blend.
 
 Run Blender -b <existing tennis blend> --python this_file -- <out.blend> <out.fbx> <existing.fbx>.
 Contact remains frame 24, end 48. Backhand, other NLA actions and mesh data are preserved.
-AthleteAnimator applies the matching grip only in these two clips: a diagonal
-handle in both (the face looks where the palm does), and a separately oriented
-face for the backhand.
+AthleteAnimator applies the matching grip only in these clips: a diagonal
+handle (the face looks where the palm does) in the forehand, the backhand, the serves and the smash,
+and a separately oriented face for the backhand.
 """
 import sys, math
 from pathlib import Path
@@ -13,8 +13,10 @@ import bpy
 from mathutils import Matrix, Vector, Quaternion
 sys.path.insert(0, str(Path(__file__).parent))
 import tennis_animations as ta
+import overhead_animations as oa
 
 REBUILD_CLIPS = ('Forehand',)
+REPLACED_TAKES = REBUILD_CLIPS + tuple(oa.CLIPS)
 # Forehand grip: the face looks where the palm does and the handle crosses the palm diagonally, like the
 # backhand. In game AthleteAnimator lays the racket diagonally by this much about its face (Unity -45 about
 # forward == Blender +45 about the racket's Y); the markers on the hand stay at the ready grip.
@@ -241,6 +243,20 @@ def regrip_forehand(frames, arm):
                 m[b]=matrix(old.to_quaternion().slerp(m[b].to_quaternion(),w),old.translation.lerp(m[b].translation,w))
         elbow=m['RightForeArm'].translation.copy()
 
+def bake(arm, rig, name, frames):
+    """Armature-space pose matrices per frame -> a new action."""
+    act=bpy.data.actions.new(name+'_corrected'); arm.animation_data.action=act; last={}
+    for f,mats in enumerate(frames):
+        for bone in rig.order:
+            parent=rig.parent[bone]
+            ref=rig.rest[bone] if parent is None else mats[parent]@rig.rest[parent].inverted()@rig.rest[bone]
+            loc,q,_=(ref.inverted()@mats[bone]).decompose()
+            if bone in last and last[bone].dot(q)<0:q.negate()
+            last[bone]=q.copy();pb=arm.pose.bones[bone]
+            pb.location=loc;pb.rotation_quaternion=q;pb.scale=(1,1,1)
+            pb.keyframe_insert('location',frame=f);pb.keyframe_insert('rotation_quaternion',frame=f)
+    return act
+
 def replace_takes(existing, generated):
     """Keep the existing FBX verbatim at element level except the selected animation graphs.
 
@@ -255,8 +271,8 @@ def replace_takes(existing, generated):
     def graph(root):
         objects={e.props[0]:e for e in section(root,b'Objects').elems}
         links=section(root,b'Connections').elems
-        ids={i for i,e in objects.items() if e.id==b'AnimationStack' and e.props[1].split(b'\0')[0] in {n.encode() for n in REBUILD_CLIPS}}
-        assert len(ids)==len(REBUILD_CLIPS)
+        ids={i for i,e in objects.items() if e.id==b'AnimationStack' and e.props[1].split(b'\0')[0] in {n.encode() for n in REPLACED_TAKES}}
+        assert len(ids)==len(REPLACED_TAKES)
         for _ in range(3):ids|={c.props[1] for c in links if c.props[2] in ids}
         assert all(objects[i].id.startswith(b'Animation') for i in ids)
         return objects,links,ids
@@ -340,25 +356,23 @@ def main():
                     mats[bone]=matrix(old.to_quaternion().slerp(mats[bone].to_quaternion(),w),old.translation.lerp(mats[bone].translation,w))
             frames.append(mats)
         if name=='Forehand':regrip_forehand(frames,arm)
-        act=bpy.data.actions.new(name+'_corrected'); ad.action=act; last={}
-        for f,mats in enumerate(frames):
-            for bone in rig.order:
-                parent=rig.parent[bone]
-                ref=rig.rest[bone] if parent is None else mats[parent]@rig.rest[parent].inverted()@rig.rest[bone]
-                loc,q,_=(ref.inverted()@mats[bone]).decompose()
-                if bone in last and last[bone].dot(q)<0:q.negate()
-                last[bone]=q.copy();pb=arm.pose.bones[bone]
-                pb.location=loc;pb.rotation_quaternion=q;pb.scale=(1,1,1)
-                pb.keyframe_insert('location',frame=f);pb.keyframe_insert('rotation_quaternion',frame=f)
-        baked[name]=act
+        baked[name]=bake(arm,rig,name,frames)
+    for name in oa.CLIPS:
+        # Corrected from the first bake, kept as <name>_source, so running this again gives the same clip
+        source=bpy.data.actions.get(name+'_source')
+        if source is None:
+            source=next(t.strips[0].action for t in ad.nla_tracks if t.name==name)
+            source.name=name+'_source';source.use_fake_user=True
+        baked[name]=bake(arm,rig,name,oa.solve(arm,source,name,torso_penalty))
     ad.action=None
     for name,act in baked.items():
         track=next(t for t in ad.nla_tracks if t.name==name)
+        old=track.strips[0].action
         for strip in list(track.strips):track.strips.remove(strip)
         strip=track.strips.new(name,0,act);strip.action_slot=act.slots[0]
-        old=originals[name];old.name=name+'_previous';act.name=name;act.use_fake_user=True
-        bpy.data.actions.remove(old)
-        bpy.data.actions.remove(bodies[name])
+        if not old.name.endswith('_source'):bpy.data.actions.remove(old)
+        act.name=name;act.use_fake_user=True
+        if name in bodies:bpy.data.actions.remove(bodies[name])
     for t in ad.nla_tracks:t.mute=muted[t.name]
     for pb in arm.pose.bones:pb.location,pb.rotation_quaternion,pb.scale=original_pose[pb.name]
     bpy.ops.wm.save_as_mainfile(filepath=str(Path(out[0]).resolve()),compress=True)
